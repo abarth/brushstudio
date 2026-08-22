@@ -1,0 +1,35 @@
+{
+  "name": "Sketch Pencil 14",
+  "notes": "BRIEF. A mechanical-pencil line for loose sketching: explore light and loose, then work into darker, more precise lines on the same drawing without changing brush. Mostly line, but it must also fill small areas with tone (facial features and the like) when scribbled. The drawing is an under-drawing that gets painted over later, so it wants a little texture, but subtle.\n\nTHE IDEA. A mechanical pencil's signature is that the line WIDTH barely moves with pressure while the VALUE moves across the whole range — the lead is a fixed cylinder. Every other brush here spends pressure on size. This one spends it on flow: minDiameter 0.82 keeps the lead a lead, and flow/spacing sweeps K from about 0.35 at a whisper to 4.4 at full weight, which is the span from wash to firm opaque line. One brush covers the whole sketch, so nothing interrupts the drawing to change tools.\n\nWHAT THE MEASUREMENTS SETTLED. Build-up runs 1 / 1.36 / 1.58 over four passes: working into a line darkens it, which is the point. The pressure ladder is monotonic from 0.17 to 0.62 with width moving only 8→12px — that row is the whole design in one picture. No repetition and no gaps, including on the speed row, so a fast hand does not break the stroke.\n\nGRAIN HAS TO COME FROM TEXTURE. At 5% spacing there are twenty dabs per diameter, so every per-dab random dynamic averages out before it reaches the paper: flowJitter at 0.35 moved seed cv only from 0 to 0.0005 and just lowered mean flow. It was removed rather than left in looking decorative. Seed cv is therefore 0 by design — the only grain that survives at pencil spacing is the Texture section, which is registered to the canvas (textureEachTip stays false) so overlapping strokes agree on where the tooth is, exactly as paper does.\n\nTEXTURE SCALE IS CANVAS-LOCKED, NOT TIP-LOCKED. Paper at scale 0.6 and above reads as blotchy streaks at this size, not tooth; 0.4 puts the fine grain near 1.6px, several cycles across a 10px line, which is about the physical ratio of paper tooth to a 0.5mm lead. Note that texture scale does not follow tip size, so resizing the brush changes the grain relationship — rescale texture.scale alongside tip.size to keep the same tooth.\n\nTHE FACET. tip.roundness 0.8 at a fixed 35° is the lead worn to a slight chisel by being held at a consistent angle: lines drawn along the axis come out finer than lines across it, which gives a curve real directional weight. Deliberately NOT direction-driven — bound to direction it becomes a calligraphy nib that swells through every turn, which is a different tool.\n\nREJECTED, SO IT IS NOT RE-TRIED.\n• K = 9 (flow 0.45 at 5% spacing) — the first draft. It saturated on the first pass, which crushed the texture to invisible and turned crosshatching into a solid mass with no tonal headroom. Lowering flow fixed the grain, the hatching and the build-up together; they were one fault, not three.\n• flowJitter — unreachable at this spacing, see above.\n• Dual brush — the usual source of organic breakup, but its mask travels with the stamp. Paper tooth does not travel; it stays on the paper. Texture is the correct mechanism here and dual would only cost render time.\n• Hardness above 0.85 — a no-op at 14px. The 128px tip resampled down carries about a pixel of inherent antialiasing, so edge falloff bottoms out at 0.31 of radius and 0.85, 0.9 and 1.0 measure identically.\n\nKNOWN TRADE. A single dab peaks at 0.18 alpha, so stippling with taps is faint. That is the direct cost of the low K that gives the tonal headroom; raising flow to darken taps would put the crosshatch back to a solid mass. Line and tone were the brief, so the headroom won.\n\nBoth renderers agree on the taper, the ladder and the tooth, so the CPU plates match what the try-out app paints.",
+  "settings": {
+    "tip": {
+      "shape": "round",
+      "size": 14,
+      "hardness": 0.85,
+      "spacing": 0.05,
+      "roundness": 0.8,
+      "angle": 35
+    },
+    "shape": {
+      "enabled": true,
+      "sizeControl": { "source": "pressure", "fadeSteps": 25 },
+      "minDiameter": 0.82
+    },
+    "texture": {
+      "enabled": true,
+      "pattern": "paper",
+      "scale": 0.4,
+      "depth": 0.4,
+      "contrast": 0.15,
+      "mode": "multiply"
+    },
+    "transfer": {
+      "enabled": true,
+      "flowControl": { "source": "pressure", "fadeSteps": 25 },
+      "flowMin": 0.08
+    },
+    "flow": 0.22,
+    "opacity": 0.9,
+    "smoothing": 0.12
+  }
+}
