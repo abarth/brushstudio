@@ -31,7 +31,7 @@ npm run brush -- render  brushes/x.json --annotate     # the plate of test marks
 npm run brush -- measure brushes/x.json                # numbers, not impressions
 npm run brush -- compare brushes/x.json --ref refs/P.abr#"Name"
 npm run brush -- inspect refs/P.abr --json             # read a pack apart
-npm run brush -- export  brushes/pack.json -o out/P.abr
+npm run brush -- export  brushes/ -o out/P.abr         # a dir, docs or a pack
 npm run dev                                            # paint with it by hand
 
 npm test                 # the harness suite, CPU renderer (~4s)

@@ -140,13 +140,16 @@ next revision, by you or by someone else, should not have to re-learn it.
 ## 8. Ship
 
 ```bash
-npm run brush -- export brushes/<pack>.json -o out/Pack.abr
+npm run brush -- export brushes/ -o out/Pack.abr            # everything
+npm run brush -- export brushes/<name>.json -o out/One.abr  # one design
 ```
 
-Export verifies its own round trip. Then ask the human to load the file in
-Photoshop and draw with it: the harness is a very good model of Photoshop's
-engine, and a model is not the thing. Where they disagree, Photoshop is
-right — write the difference into `notes`.
+Export takes a directory, a list of documents, or a pack file that names a
+grouping deliberately (see `docs/brush-format.md`). It verifies its own
+round trip. Then ask the human to load the file in Photoshop and draw with
+it: the harness is a very good model of Photoshop's engine, and a model is
+not the thing. Where they disagree, Photoshop is right — write the
+difference into `notes`.
 
 ## Which questions are whose
 

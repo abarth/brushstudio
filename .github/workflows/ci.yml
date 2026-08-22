@@ -65,5 +65,7 @@ jobs:
       - name: Check the renderers still agree
         run: npm run test:parity
 
-      - name: Check the starter pack still exports
-        run: npm run brush -- export brushes/starter-pack.json -o out/Starters.abr
+      # Exporting the directory covers every brush document, so a new design
+      # is checked the day it lands rather than when someone remembers a list.
+      - name: Check every brush still exports
+        run: npm run brush -- export brushes/ -o out/Brushes.abr

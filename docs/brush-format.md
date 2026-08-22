@@ -72,13 +72,17 @@ A pack is what becomes one `.abr` file:
 
 ```json
 {
-  "name": "Brushstudio Starters",
-  "brushes": ["round-soft.json", "chalk-dry.json"]
+  "name": "Dry Media",
+  "brushes": ["chalk-dry.json", "sketch-pencil.json"]
 }
 ```
 
 `render`, `measure` and `export` all accept a pack, a directory, or a list
-of brush documents.
+of brush documents. A pack is worth writing when the grouping is a decision
+— these brushes ship together, in this order, under this name. When you
+simply want everything, point the command at `brushes/` and skip the file;
+that is what CI does. Note that a directory holding a pack exports both, so
+the pack's brushes come out twice.
 
 ## What the engine defaults to
 
