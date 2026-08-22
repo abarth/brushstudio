@@ -1,0 +1,38 @@
+{
+  "name": "Rust 70",
+  "id": "rust-70",
+  "notes": "Corrosion as a coverage family: nine stages of the same panel rusting, 10%..90% of core-band stroke pixels inked. The levels are NESTED - each stage's rust strictly contains the last - because all nine tips are thresholds of one two-band field (tips/rust.spec.json): a bloom band (spread patches, shoulder ~2.5 c/dia) plus a fine pitting band (~22 c/dia) at 0.4x its octave variance, which puts pit-ragged fringes and satellite specks on every patch boundary. Architecture, train and calibration are the oil-sponge dual-gate verbatim (see brushes/oil-sponge-50.json and docs/fractal-texture-math.md): the mask multiplies the finished stroke once, so patch voids survive the paint train. Verified by tools/spectrum-audit.mjs: no comb, no spikes, isotropic. Advanced: sound metal reduced to scattered patches.",
+  "tips": {
+    "rust": {
+      "image": "../tips/rust-70.png"
+    }
+  },
+  "settings": {
+    "tip": {
+      "shape": "round",
+      "size": 120,
+      "hardness": 0.85,
+      "spacing": 0.12
+    },
+    "shape": {
+      "enabled": true,
+      "sizeControl": {
+        "source": "pressure",
+        "fadeSteps": 25
+      },
+      "sizeJitter": 0.15,
+      "minDiameter": 0.45
+    },
+    "dual": {
+      "enabled": true,
+      "shape": "@rust",
+      "size": 156,
+      "spacing": 0.33,
+      "scatter": 0.7,
+      "bothAxes": true,
+      "count": 1,
+      "mode": "multiply"
+    },
+    "flow": 0.9
+  }
+}

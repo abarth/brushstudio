@@ -60,28 +60,49 @@ const smoothstep = (a, b, x) => {
 
 const sp = spec.spectrum;
 /**
- * Radial target power at k cycles per tip width (docs §5). Matérn-style:
+ * One spectral band at k cycles per tip width (docs §5). Matérn-style:
  * flat below the shoulder (the texture is stationary beyond the
  * pore-cluster scale — a pure power law would pour all the variance into
  * the two or three coarsest modes and the tip would be one blob), falling
  * as k^-β from shoulder to knee, and steeper past the pore knee.
  */
-function targetPower(k) {
-  if (k < sp.bandLoCyclesPerDia) return 0;
-  const sh = sp.shoulderCyclesPerDia;
+function bandPower(b, k) {
+  if (k < b.bandLoCyclesPerDia) return 0;
+  const sh = b.shoulderCyclesPerDia;
   let s =
-    Math.pow(sh * sh + k * k, -sp.beta / 2) *
-    Math.pow(1 + (k / sp.kneeCyclesPerDia) ** 2, -(sp.beta2 - sp.beta) / 2);
+    Math.pow(sh * sh + k * k, -b.beta / 2) *
+    Math.pow(1 + (k / b.kneeCyclesPerDia) ** 2, -(b.beta2 - b.beta) / 2);
   // Roll power DOWN below the shoulder rather than plateauing: sub-cluster
   // wavelengths (≳ half a diameter) survive the union nearly intact (H ≈ 1
   // is mild there), so plateau power at k ≈ 1–2 beads the stroke into
   // clouds at 1–1.5 diameter intervals — the exact ripple measure flags.
-  if (k < sh && sp.lowSlope) s *= Math.pow(k / sh, sp.lowSlope);
-  if (k > sp.cutCyclesPerDia) {
-    if (k >= sp.taperCyclesPerDia) return 0;
-    const t = (k - sp.cutCyclesPerDia) / (sp.taperCyclesPerDia - sp.cutCyclesPerDia);
+  if (k < sh && b.lowSlope) s *= Math.pow(k / sh, b.lowSlope);
+  if (k > b.cutCyclesPerDia) {
+    if (k >= b.taperCyclesPerDia) return 0;
+    const t = (k - b.cutCyclesPerDia) / (b.taperCyclesPerDia - b.cutCyclesPerDia);
     s *= Math.cos((t * Math.PI) / 2) ** 2;
   }
+  return s;
+}
+
+/**
+ * Target power: a single band, or a weighted sum of them. A material with
+ * two characteristic populations — rust's spread patches and its fine
+ * pitting, say — is two bands with independent weights; each is normalized
+ * at its own shoulder so `weight` compares like with like.
+ */
+const COMPONENTS = (sp.components ?? [sp]).map((b) => {
+  // Normalize each band by its per-OCTAVE variance (2-D: ∝ k²·S) at its own
+  // shoulder, so `weight` compares the variance the eye sees. Per-mode
+  // normalization overweights high-frequency bands by the annulus mode
+  // count — a 0.35-weight pit band at k≈22 buried a unit bloom band at
+  // k≈2.5 under 27× its variance.
+  const anchor = Math.max(b.shoulderCyclesPerDia, b.bandLoCyclesPerDia);
+  return { ...b, norm: 1 / Math.max(bandPower(b, anchor) * anchor * anchor, 1e-30) };
+});
+function targetPower(k) {
+  let s = 0;
+  for (const b of COMPONENTS) s += (b.weight ?? 1) * b.norm * bandPower(b, k);
   return s;
 }
 
@@ -218,7 +239,7 @@ const coarseField = (() => {
     const fy = binFreq(y, N);
     for (let x = 0; x < N; x++) {
       const k = Math.hypot(binFreq(x, N), fy) * N;
-      if (k > 0 && k <= 4) amp[y * N + x] = Math.sqrt(targetPower(Math.max(k, sp.bandLoCyclesPerDia)));
+      if (k > 0 && k <= 4) amp[y * N + x] = Math.sqrt(targetPower(k));
     }
   }
   return synthField(amp);
@@ -426,7 +447,10 @@ function trainSettings(harness, tipId) {
 // --- main --------------------------------------------------------------------
 
 const t0 = Date.now();
-console.log(`synthesizing ${spec.name}: ${N}px field, β=${sp.beta}, knee ${sp.kneeCyclesPerDia} c/dia`);
+console.log(
+  `synthesizing ${spec.name}: ${N}px field, ` +
+    COMPONENTS.map((b) => `β=${b.beta}@knee ${b.kneeCyclesPerDia}${b.weight ? ` w${b.weight}` : ''}`).join(' + '),
+);
 const baseAmp = buildAmp(null);
 const baseField = synthField(baseAmp);
 
