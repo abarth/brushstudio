@@ -109,7 +109,7 @@ src/gpu/        the WebGPU stamp/composite pipeline
 src/harness/    documents, test strokes, plates, measurements
 tools/          the CLI
 web/            the try-out app
-docs/           workflow, parameters, brush format, .abr notes, provenance
+docs/           workflow, parameters, brush format, .abr notes, backends
 ```
 
 `docs/parameters.md` is worth reading before turning knobs: a handful of
@@ -119,5 +119,5 @@ being wrong.
 
 ## Licence
 
-Apache-2.0, as is northlight. See `docs/provenance.md` for exactly what was
-extracted and how to keep it in sync.
+Apache-2.0, as is northlight, whose brush engine and `.abr` reader and writer
+this repository is built around. `LICENSE` covers both.
