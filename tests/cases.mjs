@@ -256,6 +256,34 @@ export async function runCases(BS, backend = 'cpu') {
     assert(result.bytes > 0, 'the writer produced no bytes');
   });
 
+  await test('the options-bar percentages are written as unit floats', async () => {
+    // Photoshop reads Opacity and Flow as percentages and ignores either key
+    // when it arrives as an integer, so the brush imports painting with
+    // whatever the tool is currently set to. abr.ts's num() unwraps a unit
+    // float and a long alike, which is why the round trip above cannot see
+    // the difference and the bytes have to be read directly. The fractional
+    // percentages are the other half of the same fault: a long would round
+    // 22.5% to 23%.
+    const written = await BS.exportAbr([doc({ flow: 0.225, opacity: 0.375 })], {});
+    const bytes = typeof written.abr === 'string'
+      ? Uint8Array.from(atob(written.abr), (c) => c.charCodeAt(0))
+      : new Uint8Array(written.abr);
+    // a four-character descriptor key is written as u32 0 + the key, and the
+    // four bytes after it are the value's type
+    const typeOf = (key) => {
+      const needle = [0, 0, 0, 0, ...[...key].map((c) => c.charCodeAt(0))];
+      for (let i = 0; i + needle.length + 4 <= bytes.length; i++) {
+        if (needle.every((b, k) => bytes[i + k] === b)) {
+          return String.fromCharCode(...bytes.subarray(i + needle.length, i + needle.length + 4));
+        }
+      }
+      return 'missing';
+    };
+    assert(typeOf('flow') === 'UntF', `flow was written as ${typeOf('flow')}`);
+    assert(typeOf('Opct') === 'UntF', `Opct was written as ${typeOf('Opct')}`);
+    assert(written.issues.length === 0, written.issues.join('; '));
+  });
+
   await test('a sampled tip and a texture pattern are embedded', async () => {
     const result = await BS.exportAbr(
       [

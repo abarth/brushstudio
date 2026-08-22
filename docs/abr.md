@@ -52,6 +52,15 @@ checked per brush: name, tip geometry, the enabled state of every dynamics
 section, flow, opacity, blend mode, and that sampled tips and patterns
 resolve.
 
+That check has one blind spot worth knowing about, because a clean report is
+not the same as a file Photoshop will read. Our reader is deliberately
+lenient — it discards descriptor class ids, and its `num()` unwraps a unit
+float and an integer alike — so a value written at the *wrong type* comes
+back looking perfect while Photoshop drops the key. Opacity and Flow were
+exactly that bug once (see `docs/provenance.md`). Anything the round trip
+cannot see is pinned by reading the bytes directly in `tests/cases.mjs`, and
+that is where an expectation about types or class ids belongs.
+
 ## What does not cross over
 
 The engine is a Photoshop-parity engine, not Photoshop, and a few things

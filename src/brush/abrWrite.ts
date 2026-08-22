@@ -20,6 +20,9 @@ import type { BlendMode } from '../types';
  * - descriptor and pattern strings are NUL-terminated UTF-16BE (Photoshop
  *   stores "Nm" of an 18-character name with a count of 19),
  * - pattern channels use the VirtualMemoryArrayList layout, maxChannels 24,
+ * - percentages are unit floats ('UntF' '#Prc'), the options-bar Opacity and
+ *   Flow in toolOptions included — Photoshop drops a percentage that arrives
+ *   as a 'long' and paints with whatever the tool is currently set to,
  * - and every descriptor is classed (see writeDesc).
  *
  * Round-tripping through parseAbr is covered in tests/gpu.spec.mjs.
@@ -497,10 +500,14 @@ function brushPreset(
     ['useBrushPose', T.bool(false)],
     ['toolOptions', T.objc([
       ['brushPreset', T.bool(true)],
-      ['flow', T.long(pct(s.flow))],
+      // Opacity and Flow are percentages like every other one in the file,
+      // and abr.ts's num() unwraps a unit float and a long alike — so a round
+      // trip through our own parser cannot tell the two apart. The byte-level
+      // expectation in tests/cases.mjs is what holds these types in place.
+      ['flow', T.untf('#Prc', pct(s.flow))],
       ['Smoo', T.long(0)],
       ['Md  ', T.enm('BlnM', PAINT_MODE_ENUM[s.blendMode] ?? 'Nrml')],
-      ['Opct', T.long(pct(s.opacity))],
+      ['Opct', T.untf('#Prc', pct(s.opacity))],
       ['smoothing', T.bool(true)],
       ['smoothingValue', T.long(pct(s.smoothing))],
       ['usePressureOverridesSize', T.bool(s.pressureSize)],
