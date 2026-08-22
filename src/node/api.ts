@@ -66,6 +66,11 @@ export {
   resolveBrush,
 } from '../harness/commands';
 
+// The plate's bitmap type, for tools that label their own images (e.g.
+// tools/texture-sheet.mjs) — captions everywhere should come from the same
+// font for the same reason the plate's do: identical output on every host.
+export { drawText, fillRect, textHeight, textWidth } from '../harness/text';
+
 export async function plate(
   docs: Parameters<typeof commands.plate>[0],
   assets: Parameters<typeof commands.plate>[1],
