@@ -309,6 +309,29 @@ export async function runCases(BS, backend = 'cpu') {
     assert(written.issues.length === 0, written.issues.join('; '));
   });
 
+  await test('two descriptors can be held against each other by shape', async () => {
+    // The one question a reader cannot answer about itself: a key at the
+    // wrong type gets reported, but a key we never write looks exactly like
+    // one that is legitimately absent. Comparing shapes is what shows it.
+    const plain = await BS.exportAbr([doc({ tip: { size: 20 } })], {});
+    const textured = await BS.exportAbr([doc({
+      tip: { size: 20 },
+      texture: { enabled: true, pattern: 'paper', depth: 0.4 },
+    })], {});
+
+    const same = BS.compareAbrDescriptors(plain.abr, plain.abr);
+    assert(
+      !same.onlyInReference.length && !same.onlyInOurs.length && !same.differing.length,
+      'a file came out different from itself',
+    );
+
+    const diff = BS.compareAbrDescriptors(plain.abr, textured.abr);
+    const missing = diff.onlyInReference.map((r) => r.key);
+    assert(missing.includes('textureScale'), `reference-only keys were ${missing.join(', ')}`);
+    assert(missing.includes('Txtr.Idnt'), `reference-only keys were ${missing.join(', ')}`);
+    assert(!diff.onlyInOurs.length, `ours had extra keys: ${JSON.stringify(diff.onlyInOurs)}`);
+  });
+
   await test('a preset saved for another tool is read, not refused', async () => {
     // Saving a preset with tool settings binds it to the tool in use, and the
     // class of toolOptions is which tool that was: a real pack carries

@@ -1,4 +1,4 @@
-import { dumpDescriptor, parseAbr } from '../brush/abr';
+import { descriptorShape, dumpDescriptor, parseAbr } from '../brush/abr';
 import { writeAbr } from '../brush/abrWrite';
 import { defaultBrush, makeBrush } from '../brush/defaults';
 import { registerPattern, registerTip } from '../brush/patterns';
@@ -209,6 +209,57 @@ export function dumpAbr(abr: string | Uint8Array | ArrayBuffer, only?: number) {
       '}',
     ];
   });
+}
+
+/** Picks a brush out of a parsed pack by index, by name, or the first one. */
+function pickBrush(abr: string | Uint8Array | ArrayBuffer, want?: number | string) {
+  const parsed = parseAbr(toArrayBuffer(abr));
+  const index = parsed.brushes.findIndex((b, i) => {
+    if (want === undefined) return i === 0;
+    if (typeof want === 'string') return b.name.toLowerCase() === want.toLowerCase();
+    return i === want;
+  });
+  if (index < 0) throw new Error(`no brush ${JSON.stringify(want)} in that pack`);
+  return { index, brush: parsed.brushes[index] };
+}
+
+/**
+ * Holds one brush's descriptor against another's and reports the difference
+ * in shape: keys one file has and the other does not, and keys they share at
+ * different types.
+ *
+ * This is the question a reader cannot answer on its own. It reports a key at
+ * the wrong type, but a key we never write at all looks exactly like a key
+ * that is legitimately absent — and when a brush imports wrong with nothing
+ * reported, the missing key is the only place left to look.
+ */
+export function compareAbrDescriptors(
+  ours: string | Uint8Array | ArrayBuffer,
+  reference: string | Uint8Array | ArrayBuffer,
+  opts: { ours?: number | string; reference?: number | string } = {},
+) {
+  const a = pickBrush(ours, opts.ours);
+  const b = pickBrush(reference, opts.reference);
+  const shapeA = a.brush.raw ? descriptorShape(a.brush.raw) : {};
+  const shapeB = b.brush.raw ? descriptorShape(b.brush.raw) : {};
+  const side = (x: typeof a) => ({
+    index: x.index,
+    name: x.brush.name,
+    classId: x.brush.raw?.classId ?? '(none)',
+  });
+  return {
+    ours: side(a),
+    reference: side(b),
+    onlyInReference: Object.keys(shapeB)
+      .filter((k) => !(k in shapeA))
+      .map((key) => ({ key, type: shapeB[key] })),
+    onlyInOurs: Object.keys(shapeA)
+      .filter((k) => !(k in shapeB))
+      .map((key) => ({ key, type: shapeA[key] })),
+    differing: Object.keys(shapeA)
+      .filter((k) => k in shapeB && shapeA[k] !== shapeB[k])
+      .map((key) => ({ key, ours: shapeA[key], reference: shapeB[key] })),
+  };
 }
 
 /** Writes an .abr and immediately reads it back, reporting what did not survive. */

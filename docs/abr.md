@@ -158,10 +158,20 @@ npm run brush -- inspect refs/SomePack.abr --json   # every issue, structured
 npm run brush -- inspect refs/SomePack.abr --dump 0 # the raw descriptor of one brush
 ```
 
-`--dump` is the one to reach for when a brush imports wrong and nothing is
-*reported*: a reader can flag a key at the wrong type, but not a key that is
-simply absent, since most of them legitimately are. Dump the same brush from
-a pack Photoshop wrote and from one we wrote, and diff the two.
+When a brush imports wrong and nothing is *reported*, the missing key is the
+only place left to look — a reader can flag a key at the wrong type, but not
+one that is simply absent, since most of them legitimately are. Hold the two
+descriptors against each other instead of diffing dumps by hand: two brushes
+share no values, so only the shape is comparable.
+
+```bash
+npm run brush -- export brushes/mine.json -o out/mine.abr
+npm run brush -- inspect out/mine.abr --against 'refs/SomePack.abr#0'
+```
+
+That names every key the reference carries that ours does not, every key ours
+carries that it does not, and every key they share at different types.
+`--dump` prints one descriptor in full when you want the values too.
 
 Three kinds show up there. A **type** or **class** issue on a real pack means
 our table is wrong and should be corrected — Photoshop wrote that file, so it

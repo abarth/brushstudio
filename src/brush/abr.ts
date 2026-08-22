@@ -929,6 +929,29 @@ function mapBrushDescriptor(d: Descriptor, index: number, issues: AbrIssue[]): A
 }
 
 /**
+ * The descriptor's *shape*: every key path mapped to the type it is stored
+ * at, values dropped. Two brushes never share values, so this is what makes
+ * one file comparable to another — what a pack carries that we do not write
+ * is invisible to a reader (an absent key is not an error) and obvious here.
+ */
+export function descriptorShape(
+  d: Descriptor,
+  prefix = '',
+  out: Record<string, string> = {},
+): Record<string, string> {
+  for (const [key, v] of Object.entries(d.fields)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (v.t === 'desc') {
+      out[path] = `Objc ${v.v.classId}`;
+      descriptorShape(v.v, path, out);
+    } else {
+      out[path] = typeName(v);
+    }
+  }
+  return out;
+}
+
+/**
  * The descriptor as text: every key, its type and its value, nested.
  *
  * This is the view that answers "what does Photoshop actually write here",

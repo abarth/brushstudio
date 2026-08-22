@@ -73,6 +73,9 @@ const USAGE = `brushstudio — a harness for designing Photoshop brushes
                                         one plate holding design and reference
   inspect <file.abr>                    read a Photoshop pack apart
   inspect <file.abr> --dump [n]         the raw descriptor, key by key
+  inspect <file.abr> --against B.abr[#n]
+                                        which keys a reference pack has that this file
+                                        does not, and where their types differ
   export  <brush.json… | pack.json>     write a .abr, then read it back to check
 
 Common flags
@@ -250,6 +253,34 @@ async function main() {
           ? Number(flag('only'))
           : flag('only')
         : undefined;
+
+      if (flags.has('against')) {
+        // what a pack Photoshop wrote has that our file does not
+        const ref = parseRef(String(flag('against')), assets);
+        const refBytes = Buffer.from(assets[ref.abr].data, 'base64');
+        const diff = await run((h) => h.compareAbrDescriptors(bytes, refBytes, {
+          ours: only,
+          reference: ref.brush,
+        }));
+        console.log(
+          `[${diff.ours.index}] ${diff.ours.name} (${diff.ours.classId})  vs  ` +
+            `${ref.label} [${diff.reference.index}] ${diff.reference.name} ` +
+            `(${diff.reference.classId})`,
+        );
+        const section = (title, rows, line) => {
+          if (!rows.length) return;
+          console.log(`\n  ${title} (${rows.length})`);
+          for (const r of rows) console.log(`    ${line(r)}`);
+        };
+        section('only in the reference', diff.onlyInReference, (r) => `${r.key.padEnd(38)} ${r.type}`);
+        section('only in ours', diff.onlyInOurs, (r) => `${r.key.padEnd(38)} ${r.type}`);
+        section('same key, different type', diff.differing,
+          (r) => `${r.key.padEnd(38)} reference ${r.reference} · ours ${r.ours}`);
+        if (!diff.onlyInReference.length && !diff.onlyInOurs.length && !diff.differing.length) {
+          console.log('\n  the two descriptors have the same shape');
+        }
+        break;
+      }
 
       if (flags.has('dump')) {
         // the raw descriptor, for holding this file next to another one
