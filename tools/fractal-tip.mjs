@@ -306,6 +306,91 @@ function poresField(f) {
   return out;
 }
 
+/**
+ * Vein network field (field.kind: "veins"): veins are the zero contours of
+ * band-passed Gaussian fields — smooth, non-repeating curves at each
+ * octave's wavelength — lifted into ridges by exp(−(g/w)²) and summed over
+ * a hierarchy of octaves (primary veins + finer tributaries), all sampled
+ * through one strong low-frequency domain warp: the marble flow. Threshold
+ * low quantiles for thin primaries; deeper cuts widen the veins and admit
+ * tributaries, toward a breccia-like vein matrix.
+ */
+function veinsField(f) {
+  const bandAmp = (kc, bw) => {
+    const amp = new Float64Array(N * N);
+    for (let y = 0; y < N; y++) {
+      const fy = binFreq(y, N);
+      for (let x = 0; x < N; x++) {
+        const k = Math.hypot(binFreq(x, N), fy) * N;
+        if (k > 0) amp[y * N + x] = Math.exp(-((Math.log(k / kc) / bw) ** 2));
+      }
+    }
+    return amp;
+  };
+  // Each octave gets a slow amplitude modulation so a vein waxes and wanes
+  // along its length. Without it the ridge is a constant-height plateau and
+  // a sparse quantile cut lands INSIDE it — the finer octaves then decide
+  // which scraps survive, and the "primary veins" come out as chips instead
+  // of flowing segments.
+  const modAmp = bandAmp(f.modK ?? 1.5, 0.5);
+  const octaves = f.octaves.map((o, i) => ({
+    ...o,
+    g: synthField(bandAmp(o.k, o.bandwidth ?? 0.35), makePhases(spec.seed + 31 * (i + 1))),
+    mod: synthField(modAmp, makePhases(spec.seed + 57 * (i + 1))),
+  }));
+  const warpAmp = new Float64Array(N * N);
+  for (let y = 0; y < N; y++) {
+    const fy = binFreq(y, N);
+    for (let x = 0; x < N; x++) {
+      const k = Math.hypot(binFreq(x, N), fy) * N;
+      if (k > 0 && k <= (f.warpK ?? 3)) warpAmp[y * N + x] = 1 / (1 + k * k);
+    }
+  }
+  const wx = synthField(warpAmp, makePhases(spec.seed + 13));
+  const wy = synthField(warpAmp, makePhases(spec.seed + 17));
+  const wrap = (a) => ((a % N) + N) % N;
+  const sampleWrapped = (g, px, py) => {
+    const x0 = Math.floor(px);
+    const y0 = Math.floor(py);
+    const fx = px - x0;
+    const fy = py - y0;
+    const xa = wrap(x0);
+    const xb = wrap(x0 + 1);
+    const ya = wrap(y0);
+    const yb = wrap(y0 + 1);
+    const top = g[ya * N + xa] * (1 - fx) + g[ya * N + xb] * fx;
+    const bot = g[yb * N + xa] * (1 - fx) + g[yb * N + xb] * fx;
+    return top + (bot - top) * fy;
+  };
+  const out = new Float64Array(N * N);
+  const wAmp = (f.warp ?? 0.06) * N;
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const i = y * N + x;
+      const px = x + wAmp * wx[i];
+      const py = y + wAmp * wy[i];
+      let v = 0;
+      for (const o of octaves) {
+        const g = sampleWrapped(o.g, px, py);
+        const m = 0.55 + 0.45 * Math.tanh(sampleWrapped(o.mod, px, py));
+        v += o.weight * m * Math.exp(-((g / o.width) ** 2));
+      }
+      out[i] = v;
+    }
+  }
+  let mean = 0;
+  for (const v of out) mean += v;
+  mean /= out.length;
+  let vari = 0;
+  for (let i = 0; i < out.length; i++) {
+    out[i] -= mean;
+    vari += out[i] * out[i];
+  }
+  const inv = 1 / Math.sqrt(vari / out.length || 1);
+  for (let i = 0; i < out.length; i++) out[i] *= inv;
+  return out;
+}
+
 /** Values inside the vignette plateau (r ≤ 0.6), sorted — the quantile table. */
 function plateauSorted(field) {
   const c = (N - 1) / 2;
@@ -592,6 +677,7 @@ const FIELD_KIND = spec.field?.kind ?? 'spectral';
 const baseField =
   FIELD_KIND === 'cellular' ? cellularField(spec.field)
   : FIELD_KIND === 'pores' ? poresField(spec.field)
+  : FIELD_KIND === 'veins' ? veinsField(spec.field)
   : synthField(buildAmp(null));
 
 if (spec.output === 'pattern') {

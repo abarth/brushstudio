@@ -304,6 +304,33 @@ directly in the frequency domain:
    `spectralCorrection`, default off). The pre-threshold spectrum is the
    design surface; acceptance is measured on rendered marks (§7).
 
+**Non-Gaussian fields plug into the same machinery.** Steps 3–4 and the
+calibration never ask where the field came from — any scalar field with the
+right *ordering* works, and the fracture/foam/vein materials need one
+(§4's phase argument). Three generators ship in `tools/fractal-tip.mjs`,
+each keyed by `field.kind`:
+
+* `cellular` (erosion): per-cell random values over stacked Worley scales —
+  thresholds drop whole cells, giving angular fragments — plus a wall dip
+  that keeps hairline cracks sub-threshold at high coverage.
+* `pores` (foam): bubble *growth time*, `min over bubbles of (f1/r − 1)`.
+  Thresholding is uniform bubble growth, so low-coverage lace thins
+  everywhere and stays connected. (Absolute wall distance fails: its high
+  quantiles retreat to junction pockets — dots, not a network.)
+* `veins` (marble): ridges `exp(−(g/w)²)` on the zero contours of
+  band-passed Gaussian octaves, each modulated by a slow field so veins wax
+  and wane (an unmodulated ridge is a plateau, and sparse cuts shatter it
+  into chips), all domain-warped for flow.
+
+What is scale-structured stays a spectrum decision; what is
+phase-structured becomes a generator decision; coverage, nesting,
+calibration and the audit are indifferent. One warning for sparse
+phase-structured masks: dual stamps mirror but cannot rotate, so a mask
+with few, distinctive features repeats them visibly along the stroke — the
+marble family had to densify its vein field until no single shape was
+memorable. If a future engine change adds dual rotation, that constraint
+relaxes.
+
 Then calibrate `q` per level against painted strokes (§4). The result ships as a
 plain grayscale PNG under `tips` in the brush document — the engine treats it
 exactly like an `.abr`-sampled tip, and export embeds it.
