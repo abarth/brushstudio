@@ -1,0 +1,10 @@
+{
+  "name": "Soft Round 40",
+  "notes": "The control brush. Every other design in this repo is judged against it: if a new brush is not doing something this one cannot, it is not earning its place.",
+  "settings": {
+    "tip": { "shape": "round", "size": 40, "hardness": 0, "spacing": 0.12 },
+    "shape": { "enabled": true, "sizeControl": { "source": "pressure", "fadeSteps": 25 }, "minDiameter": 0.15 },
+    "transfer": { "enabled": true, "flowControl": { "source": "pressure", "fadeSteps": 25 }, "flowMin": 0.1 },
+    "flow": 0.85
+  }
+}

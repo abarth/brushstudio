@@ -1,0 +1,31 @@
+{
+  "name": "brushstudio",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A harness for designing Photoshop brushes: a Photoshop-parity brush engine, ABR import/export, headless stroke rendering, and numeric mark analysis.",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "brushstudio": "tools/cli.mjs"
+  },
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "brush": "node tools/cli.mjs",
+    "test": "node tests/run.mjs",
+    "test:gpu": "node tests/run.mjs --backend gpu",
+    "test:parity": "node tests/parity.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@webgpu/types": "^0.1.51",
+    "esbuild": "^0.28.2",
+    "playwright": "^1.49.1",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3"
+  }
+}

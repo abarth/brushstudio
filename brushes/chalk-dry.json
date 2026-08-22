@@ -1,0 +1,44 @@
+{
+  "name": "Dry Chalk 90",
+  "notes": "Dry media: the paper should show through everywhere, not just at the edges. Grain comes from the tip, the texture, and size jitter together \u2014 any one of them alone reads as a filter laid over a smooth stroke rather than as chalk. Angle jitter is deliberately large because a chalk stick never lands twice the same way.",
+  "settings": {
+    "tip": {
+      "shape": "chalk",
+      "size": 90,
+      "spacing": 0.08,
+      "roundness": 0.85,
+      "angle": -20
+    },
+    "shape": {
+      "enabled": true,
+      "sizeControl": {
+        "source": "pressure",
+        "fadeSteps": 25
+      },
+      "sizeJitter": 0.12,
+      "minDiameter": 0.35,
+      "angleJitter": 0.06,
+      "roundnessJitter": 0.1,
+      "minRoundness": 0.6
+    },
+    "texture": {
+      "enabled": true,
+      "pattern": "paper",
+      "scale": 1.6,
+      "depth": 0.6,
+      "contrast": 0.2,
+      "mode": "multiply"
+    },
+    "transfer": {
+      "enabled": true,
+      "flowControl": {
+        "source": "pressure",
+        "fadeSteps": 25
+      },
+      "flowMin": 0.15,
+      "flowJitter": 0.12
+    },
+    "flow": 0.6,
+    "opacity": 0.95
+  }
+}

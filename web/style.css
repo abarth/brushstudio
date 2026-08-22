@@ -1,0 +1,77 @@
+:root {
+  color-scheme: dark;
+  --bg: #161618;
+  --panel: #1e1e21;
+  --line: #303035;
+  --text: #dedbd6;
+  --dim: #8e8a84;
+  --accent: #d8a15c;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px ui-sans-serif, system-ui, sans-serif;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+h1 { font-size: 14px; margin: 0 8px 0 0; letter-spacing: 0.04em; color: var(--accent); }
+main { flex: 1; display: flex; min-height: 0; }
+canvas { flex: 1; min-width: 0; touch-action: none; display: block; cursor: crosshair; }
+aside {
+  width: 320px;
+  border-left: 1px solid var(--line);
+  background: var(--panel);
+  padding: 12px;
+  overflow-y: auto;
+}
+#notes { color: var(--dim); line-height: 1.45; margin: 0 0 12px; }
+select, button, input[type='number'] {
+  background: #2a2a2e;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 3px 7px;
+  font: inherit;
+}
+button { cursor: pointer; }
+button:hover { border-color: var(--accent); }
+#status { color: var(--dim); margin-left: auto; }
+.group { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
+.group > h2 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+  margin: 0 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.row { display: grid; grid-template-columns: 92px 1fr 46px; align-items: center; gap: 8px; margin: 3px 0; }
+.row label { color: var(--dim); }
+.row output { text-align: right; font-variant-numeric: tabular-nums; }
+input[type='range'] { width: 100%; accent-color: var(--accent); }
+.check { display: inline-flex; align-items: center; gap: 4px; color: var(--dim); }
+#patch {
+  margin-top: 10px;
+  padding: 8px;
+  background: #141416;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font: 11px ui-monospace, Menlo, monospace;
+  color: var(--dim);
+  white-space: pre-wrap;
+  max-height: 40vh;
+  overflow: auto;
+}
