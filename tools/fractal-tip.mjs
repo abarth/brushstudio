@@ -322,6 +322,61 @@ function poresField(f) {
  * low quantiles for thin primaries; deeper cuts widen the veins and admit
  * tributaries, toward a breccia-like vein matrix.
  */
+function sampleWrapped(g, px, py) {
+  const x0 = Math.floor(px);
+  const y0 = Math.floor(py);
+  const fx = px - x0;
+  const fy = py - y0;
+  const wrap = (a) => ((a % N) + N) % N;
+  const xa = wrap(x0);
+  const xb = wrap(x0 + 1);
+  const ya = wrap(y0);
+  const yb = wrap(y0 + 1);
+  const top = g[ya * N + xa] * (1 - fx) + g[ya * N + xb] * fx;
+  const bot = g[yb * N + xa] * (1 - fx) + g[yb * N + xb] * fx;
+  return top + (bot - top) * fy;
+}
+
+/**
+ * Warped spectral field (field.kind: "warped"): the spectrum block's field
+ * resampled through a low-frequency displacement — domain-warped fbm, the
+ * advected look of real cloud and smoke that a plain spectrum lacks. warp
+ * is displacement as a fraction of tip width; warpK caps the displacement
+ * field's band.
+ */
+function warpedField(f) {
+  const base = synthField(buildAmp(null));
+  const warpAmp = new Float64Array(N * N);
+  for (let y = 0; y < N; y++) {
+    const fy = binFreq(y, N);
+    for (let x = 0; x < N; x++) {
+      const k = Math.hypot(binFreq(x, N), fy) * N;
+      if (k > 0 && k <= (f.warpK ?? 2.5)) warpAmp[y * N + x] = 1 / (1 + k * k);
+    }
+  }
+  const wx = synthField(warpAmp, makePhases(spec.seed + 13));
+  const wy = synthField(warpAmp, makePhases(spec.seed + 17));
+  const wAmp = (f.warp ?? 0.08) * N;
+  const out = new Float64Array(N * N);
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const i = y * N + x;
+      out[i] = sampleWrapped(base, x + wAmp * wx[i], y + wAmp * wy[i]);
+    }
+  }
+  let mean = 0;
+  for (const v of out) mean += v;
+  mean /= out.length;
+  let vari = 0;
+  for (let i = 0; i < out.length; i++) {
+    out[i] -= mean;
+    vari += out[i] * out[i];
+  }
+  const inv = 1 / Math.sqrt(vari / out.length || 1);
+  for (let i = 0; i < out.length; i++) out[i] *= inv;
+  return out;
+}
+
 function veinsField(f) {
   const bandAmp = (kc, bw) => {
     const amp = new Float64Array(N * N);
@@ -355,20 +410,6 @@ function veinsField(f) {
   }
   const wx = synthField(warpAmp, makePhases(spec.seed + 13));
   const wy = synthField(warpAmp, makePhases(spec.seed + 17));
-  const wrap = (a) => ((a % N) + N) % N;
-  const sampleWrapped = (g, px, py) => {
-    const x0 = Math.floor(px);
-    const y0 = Math.floor(py);
-    const fx = px - x0;
-    const fy = py - y0;
-    const xa = wrap(x0);
-    const xb = wrap(x0 + 1);
-    const ya = wrap(y0);
-    const yb = wrap(y0 + 1);
-    const top = g[ya * N + xa] * (1 - fx) + g[ya * N + xb] * fx;
-    const bot = g[yb * N + xa] * (1 - fx) + g[yb * N + xb] * fx;
-    return top + (bot - top) * fy;
-  };
   const out = new Float64Array(N * N);
   const wAmp = (f.warp ?? 0.06) * N;
   for (let y = 0; y < N; y++) {
@@ -510,7 +551,9 @@ function scratchesField(f) {
   for (let m = 0; m < count; m++) {
     const L = heavy(f.lenMin * N, f.lenMax * N);
     const w = heavy(f.widthMin ?? 1.2, f.widthMax ?? 5);
-    const depth = 0.4 + 0.6 * rng();
+    // depthPow > 1 makes depth heavy-tailed: many faint passes, few gouges
+    const dMin = f.depthMin ?? 0.4;
+    const depth = dMin + (1 - dMin) * Math.pow(rng(), f.depthPow ?? 1);
     const th = rng() * Math.PI * 2;
     const ax = rng() * N;
     const ay = rng() * N;
@@ -914,6 +957,7 @@ const baseField =
   : FIELD_KIND === 'banded' ? bandedField(spec.field)
   : FIELD_KIND === 'scratches' ? scratchesField(spec.field)
   : FIELD_KIND === 'domains' ? domainsField(spec.field)
+  : FIELD_KIND === 'warped' ? warpedField(spec.field)
   : synthField(buildAmp(null));
 
 if (spec.output === 'pattern') {
