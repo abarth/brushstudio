@@ -59,17 +59,35 @@ export async function openHarness({ verbose = false } = {}) {
   const killServer = () => {
     if (!serverDead) server.kill();
   };
-  process.once('exit', killServer);
+
+  /**
+   * Tear-down that survives an interrupt.
+   *
+   * `process.on('exit')` alone is not enough: it does not run for SIGINT or
+   * SIGTERM, which is exactly how this gets stopped in practice — a Ctrl-C,
+   * or a `timeout` around the command. Without this, the dev server and a
+   * whole Chromium tree are left behind holding the CPU, and the next run
+   * is measured against them.
+   */
+  const teardown = { run: killServer };
+  const onExit = () => teardown.run();
+  const onSignal = (signal) => {
+    teardown.run();
+    process.exit(signal === 'SIGINT' ? 130 : 143);
+  };
+  process.once('exit', onExit);
+  process.once('SIGINT', () => onSignal('SIGINT'));
+  process.once('SIGTERM', () => onSignal('SIGTERM'));
 
   try {
-    return await connect(server, port, { verbose, killServer });
+    return await connect(server, port, { verbose, killServer, teardown });
   } catch (err) {
     killServer();
     throw err;
   }
 }
 
-async function connect(server, port, { verbose, killServer }) {
+async function connect(server, port, { verbose, killServer, teardown }) {
   const url = `http://127.0.0.1:${port}/harness.html`;
   const deadline = Date.now() + 60_000;
   for (;;) {
@@ -111,6 +129,17 @@ async function connect(server, port, { verbose, killServer }) {
     if (errors.length) throw new Error(`harness failed to load:\n  ${errors.join('\n  ')}`);
     throw err;
   }
+
+  // From here an interrupt has a browser to clean up as well. `kill()` is
+  // the synchronous path a signal handler can actually finish.
+  teardown.run = () => {
+    try {
+      browser.process()?.kill('SIGKILL');
+    } catch {
+      /* already gone */
+    }
+    killServer();
+  };
 
   const close = async () => {
     await browser.close().catch(() => {});
