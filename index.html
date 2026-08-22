@@ -13,19 +13,37 @@
   <body>
     <header>
       <h1>brushstudio</h1>
-      <label>brush <select id="brush"></select></label>
-      <button id="clear">Clear</button>
-      <button id="save">Save PNG</button>
-      <label class="check"><input type="checkbox" id="dark" /> dark ground</label>
-      <span id="status"></span>
+      <details id="menu">
+        <summary aria-label="menu" title="menu">&#9776;</summary>
+        <div class="sheet">
+          <button id="clear">Clear canvas</button>
+          <button id="save">Save PNG</button>
+          <label class="check"><input type="checkbox" id="dark" /> dark ground</label>
+        </div>
+      </details>
     </header>
     <main>
       <canvas id="canvas"></canvas>
+      <p id="status"></p>
       <aside>
-        <p id="notes"></p>
+        <section id="library">
+          <div class="find">
+            <input
+              id="search"
+              type="search"
+              placeholder="filter brushes"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <span id="count"></span>
+          </div>
+          <ul id="brushes"></ul>
+        </section>
         <div id="controls"></div>
-        <button id="copy">Copy settings patch</button>
-        <pre id="patch"></pre>
+        <section id="patchbox">
+          <div class="head">settings patch <button id="copy">Copy</button></div>
+          <pre id="patch"></pre>
+        </section>
       </aside>
     </main>
     <script type="module" src="/web/main.ts"></script>

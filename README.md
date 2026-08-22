@@ -57,7 +57,10 @@ whether a brush *works*; the human settles whether it is *good*.
 For the second, there is a try-out app — `npm run dev` — where a reviewer
 paints with the brush by hand, moves the sliders, and hits **Copy settings
 patch**. Their fiddling comes back as JSON that drops straight into the
-brush document, instead of a description that has to be re-guessed.
+brush document, instead of a description that has to be re-guessed. The
+panel lists every document in `brushes/`, shows the bitmap sitting in each
+tip and texture slot beside the picker that swaps it, and collapses the
+sections that are switched off.
 
 ## Commands
 

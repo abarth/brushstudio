@@ -2,10 +2,12 @@
   color-scheme: dark;
   --bg: #161618;
   --panel: #1e1e21;
+  --sunk: #141416;
   --line: #303035;
   --text: #dedbd6;
   --dim: #8e8a84;
   --accent: #d8a15c;
+  --bar: 34px;
 }
 * { box-sizing: border-box; }
 body {
@@ -17,26 +19,82 @@ body {
   color: var(--text);
   font: 13px ui-sans-serif, system-ui, sans-serif;
 }
+
+/* --- top bar: fixed height, nothing in it that can wrap --- */
 header {
+  flex: none;
+  height: var(--bar);
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 14px;
+  padding: 0 6px 0 14px;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
 }
-h1 { font-size: 14px; margin: 0 8px 0 0; letter-spacing: 0.04em; color: var(--accent); }
-main { flex: 1; display: flex; min-height: 0; }
+h1 { font-size: 13px; margin: 0; letter-spacing: 0.04em; color: var(--accent); font-weight: 600; }
+#menu { margin-left: auto; position: relative; }
+#menu > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--dim);
+  line-height: 1.4;
+}
+#menu > summary::-webkit-details-marker { display: none; }
+#menu > summary:hover, #menu[open] > summary { color: var(--text); border-color: var(--line); }
+#menu .sheet {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 168px;
+  padding: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  box-shadow: 0 8px 22px #0009;
+}
+#menu .sheet button { text-align: left; }
+
+main { flex: 1; display: flex; min-height: 0; position: relative; }
 canvas { flex: 1; min-width: 0; touch-action: none; display: block; cursor: crosshair; }
+
+/* --- transient messages float over the canvas, so they never move the layout --- */
+#status {
+  position: absolute;
+  left: 14px;
+  bottom: 12px;
+  max-width: 46ch;
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #000000cc;
+  color: var(--dim);
+  line-height: 1.4;
+  pointer-events: none; /* it sits over the canvas; it must never eat a stroke */
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s;
+}
+#status.on { opacity: 1; visibility: visible; }
+
+/* --- side panel: three bounded regions, each scrolling on its own --- */
 aside {
-  width: 320px;
+  width: 328px;
+  flex: none;
   border-left: 1px solid var(--line);
   background: var(--panel);
-  padding: 12px;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
-#notes { color: var(--dim); line-height: 1.45; margin: 0 0 12px; }
-select, button, input[type='number'] {
+select, button, input[type='search'], input[type='number'] {
   background: #2a2a2e;
   color: var(--text);
   border: 1px solid var(--line);
@@ -46,8 +104,40 @@ select, button, input[type='number'] {
 }
 button { cursor: pointer; }
 button:hover { border-color: var(--accent); }
-#status { color: var(--dim); margin-left: auto; }
+input[type='search']::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.5); }
+
+/* library */
+#library { flex: none; display: flex; flex-direction: column; min-height: 0; border-bottom: 1px solid var(--line); }
+.find { display: flex; align-items: center; gap: 8px; padding: 8px 12px; }
+.find input { flex: 1; min-width: 0; }
+#count { color: var(--dim); font-variant-numeric: tabular-nums; }
+#brushes {
+  list-style: none;
+  margin: 0;
+  padding: 0 6px 8px;
+  overflow-y: auto;
+  max-height: 30vh;
+}
+#brushes li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#brushes li span { overflow: hidden; text-overflow: ellipsis; }
+#brushes li .where { color: var(--dim); font-size: 11px; margin-left: auto; padding-left: 8px; }
+#brushes li:hover { background: #2a2a2e; }
+#brushes li.on { background: #33291b; color: var(--accent); }
+#brushes li.on .where { color: #a8814c; }
+#brushes .empty { color: var(--dim); padding: 3px 8px; cursor: default; }
+
+/* settings */
+#controls { flex: 1; overflow-y: auto; padding: 0 12px 12px; min-height: 0; }
 .group { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
+.group:first-child { border-top: none; }
 .group > h2 {
   font-size: 11px;
   text-transform: uppercase;
@@ -58,20 +148,53 @@ button:hover { border-color: var(--accent); }
   align-items: center;
   gap: 6px;
 }
+/* a section that is switched off shows its switch and nothing else: sliders
+   that do not reach the mark are noise */
+.group.off > h2 { margin: 0; }
+.group.off > .body { display: none; }
 .row { display: grid; grid-template-columns: 92px 1fr 46px; align-items: center; gap: 8px; margin: 3px 0; }
 .row label { color: var(--dim); }
 .row output { text-align: right; font-variant-numeric: tabular-nums; }
-input[type='range'] { width: 100%; accent-color: var(--accent); }
+input[type='range'], input[type='checkbox'] { accent-color: var(--accent); }
+input[type='range'] { width: 100%; }
 .check { display: inline-flex; align-items: center; gap: 4px; color: var(--dim); }
+
+/* the bitmap in a tip or texture slot, beside the picker that changes it */
+.bitmap { display: grid; grid-template-columns: 96px 1fr; gap: 9px; align-items: start; margin: 2px 0 9px; }
+.bitmap canvas {
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--sunk);
+}
+.bitmap select { width: 100%; }
+.bitmap .meta {
+  margin-top: 5px;
+  color: var(--dim);
+  font: 11px ui-monospace, Menlo, monospace;
+}
+
+/* patch */
+#patchbox { flex: none; display: flex; flex-direction: column; min-height: 0; max-height: 32vh; border-top: 1px solid var(--line); }
+#patchbox .head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+}
+#patchbox .head button { margin-left: auto; text-transform: none; letter-spacing: 0; }
 #patch {
-  margin-top: 10px;
+  margin: 0 12px 12px;
   padding: 8px;
-  background: #141416;
+  background: var(--sunk);
   border: 1px solid var(--line);
   border-radius: 4px;
   font: 11px ui-monospace, Menlo, monospace;
   color: var(--dim);
   white-space: pre-wrap;
-  max-height: 40vh;
   overflow: auto;
 }

@@ -109,6 +109,11 @@ The try-out app's **Copy settings patch** button emits exactly the JSON a
 brush document takes, so a reviewer's fiddling comes back as a diff instead
 of a description.
 
+Its tip, dual brush and texture slots each show the bitmap they hold next to
+the picker that swaps it, so trying `fiber-drag` against `wisp-filament` is a
+click rather than a round trip — and a bitmap the document declared comes
+back in the patch under the `@name` the document gave it.
+
 ## 7. Revise
 
 Change **one or two** parameters per iteration and re-measure. The

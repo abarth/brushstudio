@@ -1,12 +1,16 @@
 import type { PointerSample } from '../src/brush/dynamics';
 import { engineStrokeParams } from '../src/brush/engineParams';
-import type { BrushSettings } from '../src/brush/types';
+import { getPattern, getTip } from '../src/brush/patterns';
+import { PATTERNS, TIP_SHAPES, type BrushPatch, type BrushSettings } from '../src/brush/types';
+// the scalar twin of the shader's `texValue`, so the texture swatch shows the
+// same brightness/contrast/invert the stroke will be carved with
+import { texValue } from '../src/engine/cpu/blend';
 import { PaintEngine } from '../src/gpu/engine';
 import { StrokeSession } from '../src/gpu/stroke';
 import { resolveBrush, type AssetBag, type BrushDoc } from '../src/harness/brushDoc';
-import { describeBrush } from '../src/harness/describe';
 import { diffFromDefaults } from '../src/harness/patch';
 import { makeLayerMeta, type LayerMeta } from '../src/types';
+import { drawSwatch } from './swatch';
 
 /**
  * The try-out app: the half of the loop a plate cannot do.
@@ -16,6 +20,11 @@ import { makeLayerMeta, type LayerMeta } from '../src/types';
  * whether a brush is finished. Tweaks made here come back out as a settings
  * patch, so a reviewer's fiddling lands in the brush document rather than
  * being described in prose and re-guessed.
+ *
+ * The panel is built for someone who already knows the engine: no prose, no
+ * controls for sections that are switched off, and the tip and texture
+ * bitmaps shown as pictures, because "fiber-drag" and "wisp-filament" are two
+ * words until you have seen them.
  */
 
 /**
@@ -30,13 +39,94 @@ const DARK_PAPER: [number, number, number, number] = [0.11, 0.107, 0.115, 1];
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>('canvas');
-const status = $('status');
 
-// Brush documents live in the repo, so the picker is just the folder.
-const docModules = import.meta.glob('/brushes/*.json', { eager: true, import: 'default' }) as Record<
+let statusTimer = 0;
+
+/**
+ * Messages float over the canvas rather than sitting in the top bar: a
+ * warning is a sentence, the bar is a fixed 34px, and one must not decide
+ * the other.
+ */
+function setStatus(text: string, ms = 3000): void {
+  const el = $('status');
+  el.textContent = text;
+  el.classList.toggle('on', text !== '');
+  clearTimeout(statusTimer);
+  if (text && ms > 0) statusTimer = window.setTimeout(() => el.classList.remove('on'), ms);
+}
+
+// ---------------------------------------------------------------------------
+// the library
+// ---------------------------------------------------------------------------
+
+// Brush documents live in the repo, so the library is just the folder — and
+// it is globbed deep, so a pack that grows past a screenful can be filed into
+// subfolders without the app needing to know.
+const docModules = import.meta.glob('/brushes/**/*.json', { eager: true, import: 'default' }) as Record<
   string,
   BrushDoc & { brushes?: string[] }
 >;
+
+interface Entry {
+  path: string;
+  name: string;
+  /** subfolder under brushes/, '' at the root — shown so names can repeat */
+  folder: string;
+  /** the document's notes, as a hover: intent belongs in the file, not the UI */
+  notes: string;
+}
+
+const LIBRARY: Entry[] = Object.keys(docModules)
+  .filter((path) => docModules[path]?.settings) // packs list brushes, they are not one
+  .map((path) => {
+    const rel = path.replace(/^\/brushes\//, '');
+    const cut = rel.lastIndexOf('/');
+    return {
+      path,
+      name: docModules[path].name ?? rel,
+      folder: cut < 0 ? '' : rel.slice(0, cut),
+      notes: docModules[path].notes ?? '',
+    };
+  })
+  .sort((a, b) => a.folder.localeCompare(b.folder) || a.name.localeCompare(b.name));
+
+let current = '';
+let shown: Entry[] = LIBRARY;
+
+function renderLibrary(): void {
+  const query = $<HTMLInputElement>('search').value.trim().toLowerCase();
+  shown = query
+    ? LIBRARY.filter((e) => `${e.folder}/${e.name}`.toLowerCase().includes(query))
+    : LIBRARY;
+  $('count').textContent = query ? `${shown.length}/${LIBRARY.length}` : String(LIBRARY.length);
+
+  const list = $('brushes');
+  list.textContent = '';
+  if (shown.length === 0) {
+    const empty = document.createElement('li');
+    empty.className = 'empty';
+    empty.textContent = 'no match';
+    list.append(empty);
+    return;
+  }
+  for (const entry of shown) {
+    const row = document.createElement('li');
+    row.className = entry.path === current ? 'on' : '';
+    if (entry.notes) row.title = entry.notes;
+    const name = document.createElement('span');
+    name.textContent = entry.name;
+    row.append(name);
+    if (entry.folder) {
+      const where = document.createElement('span');
+      where.className = 'where';
+      where.textContent = entry.folder;
+      row.append(where);
+    }
+    row.addEventListener('click', () => void selectBrush(entry.path));
+    if (entry.path === current) queueMicrotask(() => row.scrollIntoView({ block: 'nearest' }));
+    list.append(row);
+  }
+}
 
 async function loadAssets(path: string, doc: BrushDoc): Promise<AssetBag> {
   const assets: AssetBag = {};
@@ -151,6 +241,7 @@ window.addEventListener('resize', draw);
 // ---------------------------------------------------------------------------
 
 type Path = [keyof BrushSettings, string?];
+type Value = number | boolean | string;
 
 interface Slider {
   label: string;
@@ -162,10 +253,17 @@ interface Slider {
   pct?: boolean;
 }
 
+/** A bitmap slot: which tip or pattern the section is stamping. */
+interface Bitmap {
+  path: Path;
+  kind: 'tip' | 'pattern';
+}
+
 interface Group {
   title: string;
   /** the section's `enabled` flag, when it has one */
   toggle?: keyof BrushSettings;
+  bitmap?: Bitmap;
   sliders: Slider[];
   checks?: { label: string; path: Path }[];
 }
@@ -173,6 +271,7 @@ interface Group {
 const GROUPS: Group[] = [
   {
     title: 'tip',
+    bitmap: { path: ['tip', 'shape'], kind: 'tip' },
     sliders: [
       { label: 'size', path: ['tip', 'size'], min: 1, max: 600, step: 1 },
       { label: 'hardness', path: ['tip', 'hardness'], min: 0, max: 1, step: 0.01, pct: true },
@@ -221,6 +320,7 @@ const GROUPS: Group[] = [
   {
     title: 'texture',
     toggle: 'texture',
+    bitmap: { path: ['texture', 'pattern'], kind: 'pattern' },
     sliders: [
       { label: 'depth', path: ['texture', 'depth'], min: 0, max: 1, step: 0.01, pct: true },
       { label: 'scale', path: ['texture', 'scale'], min: 0.1, max: 4, step: 0.05, pct: true },
@@ -235,6 +335,7 @@ const GROUPS: Group[] = [
   {
     title: 'dual brush',
     toggle: 'dual',
+    bitmap: { path: ['dual', 'shape'], kind: 'tip' },
     sliders: [
       { label: 'size', path: ['dual', 'size'], min: 1, max: 600, step: 1 },
       { label: 'spacing', path: ['dual', 'spacing'], min: 0.01, max: 2, step: 0.01, pct: true },
@@ -266,14 +367,14 @@ const GROUPS: Group[] = [
   },
 ];
 
-function getAt(path: Path): number | boolean {
+function getAt(path: Path): Value {
   const [section, key] = path;
   const value = settings[section];
-  if (key === undefined) return value as number | boolean;
-  return (value as unknown as Record<string, number | boolean>)[key];
+  if (key === undefined) return value as Value;
+  return (value as unknown as Record<string, Value>)[key];
 }
 
-function setAt(path: Path, value: number | boolean): void {
+function setAt(path: Path, value: Value): void {
   const [section, key] = path;
   if (key === undefined) {
     (settings as unknown as Record<string, unknown>)[section] = value;
@@ -282,25 +383,134 @@ function setAt(path: Path, value: number | boolean): void {
   }
 }
 
+/**
+ * The bitmaps the current document declares: `@name` against the id the
+ * engine registered it under. Documents name their own tips and patterns, so
+ * a borrowed .abr bitmap has to appear in the picker under the name the
+ * document gave it — and go back into the patch under that name too.
+ */
+let docTips: [string, string][] = [];
+let docPatterns: [string, string][] = [];
+/** engine id -> the document's name for it, the reverse of the two above */
+let aliasBack = new Map<string, string>();
+
+/** Redraws for the swatches on screen, run whenever a control moves. */
+let repaint: (() => void)[] = [];
+
+function fillOptions(select: HTMLSelectElement, kind: 'tip' | 'pattern', value: string): void {
+  const declared = kind === 'tip' ? docTips : docPatterns;
+  const builtin = kind === 'tip' ? TIP_SHAPES : PATTERNS;
+  const add = (parent: HTMLElement, id: string, label: string) => {
+    const option = document.createElement('option');
+    option.value = id;
+    option.textContent = label;
+    parent.append(option);
+  };
+  // an id the lists do not cover — a bitmap left over from another document —
+  // still has to show, or the picker would quietly misreport the brush
+  if (value && !declared.some(([, id]) => id === value) && !builtin.some((b) => b.id === value)) {
+    add(select, value, value);
+  }
+  if (declared.length) {
+    const group = document.createElement('optgroup');
+    group.label = 'this brush';
+    for (const [name, id] of declared) add(group, id, `@${name}`);
+    select.append(group);
+  }
+  const group = document.createElement('optgroup');
+  group.label = 'built-in';
+  for (const item of builtin) add(group, String(item.id), item.label);
+  select.append(group);
+  select.value = value;
+}
+
+/** The bitmap in a slot, beside the picker that changes it. */
+function bitmapRow(spec: Bitmap): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'bitmap';
+  const swatch = document.createElement('canvas');
+  const side = document.createElement('div');
+  const select = document.createElement('select');
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+
+  fillOptions(select, spec.kind, String(getAt(spec.path)));
+  select.addEventListener('input', () => {
+    setAt(spec.path, select.value);
+    showPatch();
+  });
+
+  let drawn = '';
+  const paint = () => {
+    const id = String(getAt(spec.path));
+    const tex = settings.texture;
+    // a swatch is a few hundred thousand pixels; only redraw one whose
+    // picture has actually changed, so dragging a slider stays cheap
+    const key =
+      spec.kind === 'tip'
+        ? id
+        : [id, tex.brightness, tex.contrast, tex.invert, tex.scale].join('|');
+    if (key === drawn) return;
+    drawn = key;
+    if (select.value !== id) select.value = id;
+    if (spec.kind === 'tip') {
+      const map = getTip(id);
+      drawSwatch(swatch, map);
+      // the round tip is analytic — the engine samples no bitmap for it, and
+      // the hardness slider, not a picture, is what shapes its rim
+      meta.textContent = id === 'round' ? 'analytic — no bitmap' : `${map.size}px`;
+    } else {
+      const map = getPattern(id);
+      const bci = {
+        brightness: tex.brightness,
+        contrast: tex.contrast,
+        invert: tex.invert,
+        depth: tex.depth,
+      };
+      drawSwatch(swatch, map, (v) => texValue(v, bci));
+      // scale is relative to the pattern's own size, so what matters is the
+      // tile it lands on the canvas at, against the tip diameter
+      meta.textContent = `${map.size}px tile → ${Math.round(map.size * tex.scale)}px`;
+    }
+  };
+  paint();
+  repaint.push(paint);
+
+  side.append(select, meta);
+  row.append(swatch, side);
+  return row;
+}
+
 function buildControls(): void {
   const host = $('controls');
   host.textContent = '';
+  repaint = [];
   for (const group of GROUPS) {
     const box = document.createElement('div');
     box.className = 'group';
     const head = document.createElement('h2');
     head.textContent = group.title;
+    const body = document.createElement('div');
+    body.className = 'body';
+
     if (group.toggle) {
+      const flag = () => settings[group.toggle!] as { enabled: boolean };
       const on = document.createElement('input');
       on.type = 'checkbox';
-      on.checked = !!(settings[group.toggle] as { enabled?: boolean }).enabled;
+      on.checked = !!flag().enabled;
+      // a section that is off is collapsed to its switch: its sliders reach
+      // nothing, and reading them as if they did is the confusing part
+      box.classList.toggle('off', !on.checked);
       on.addEventListener('input', () => {
-        (settings[group.toggle!] as { enabled: boolean }).enabled = on.checked;
+        flag().enabled = on.checked;
+        box.classList.toggle('off', !on.checked);
         showPatch();
       });
       head.prepend(on);
     }
-    box.append(head);
+    box.append(head, body);
+
+    if (group.bitmap) body.append(bitmapRow(group.bitmap));
 
     for (const slider of group.sliders) {
       const row = document.createElement('div');
@@ -325,7 +535,7 @@ function buildControls(): void {
         showPatch();
       });
       row.append(label, input, out);
-      box.append(row);
+      body.append(row);
     }
 
     for (const check of group.checks ?? []) {
@@ -339,15 +549,35 @@ function buildControls(): void {
         showPatch();
       });
       row.append(input, document.createTextNode(` ${check.label}`));
-      box.append(row, document.createElement('br'));
+      body.append(row, document.createElement('br'));
     }
     host.append(box);
   }
 }
 
+/**
+ * Puts the document's own names back on its bitmaps.
+ *
+ * The settings carry engine ids, which are private to this session; a
+ * document writes `@name`. This is the inverse of the dereference
+ * `resolveBrush` does on the way in, so what the panel offers to copy is
+ * what the file can hold.
+ */
+function reAlias(patch: BrushPatch): BrushPatch {
+  for (const section of Object.values(patch as Record<string, unknown>)) {
+    if (!section || typeof section !== 'object') continue;
+    const values = section as Record<string, unknown>;
+    for (const key of ['shape', 'pattern']) {
+      const value = values[key];
+      if (typeof value === 'string' && aliasBack.has(value)) values[key] = `@${aliasBack.get(value)}`;
+    }
+  }
+  return patch;
+}
+
 function showPatch(): void {
-  $('patch').textContent = JSON.stringify(diffFromDefaults(settings), null, 2);
-  status.textContent = describeBrush(settings);
+  for (const paint of repaint) paint();
+  $('patch').textContent = JSON.stringify(reAlias(diffFromDefaults(settings)), null, 2);
 }
 
 // ---------------------------------------------------------------------------
@@ -356,17 +586,26 @@ function showPatch(): void {
 
 async function selectBrush(path: string): Promise<void> {
   const doc = JSON.parse(JSON.stringify(docModules[path])) as BrushDoc;
-  const assets = await loadAssets(path, doc);
-  const resolved = await resolveBrush(doc, assets, path);
-  settings = resolved.settings;
-  $('notes').textContent = resolved.notes || '';
-  buildControls();
-  showPatch();
+  try {
+    const assets = await loadAssets(path, doc);
+    const resolved = await resolveBrush(doc, assets, path);
+    settings = resolved.settings;
+    docTips = Object.keys(doc.tips ?? {}).map((name) => [name, resolved.aliases[name]]);
+    docPatterns = Object.keys(doc.patterns ?? {}).map((name) => [name, resolved.aliases[name]]);
+    aliasBack = new Map(Object.entries(resolved.aliases).map(([name, id]) => [id, name]));
+    current = path;
+    renderLibrary();
+    buildControls();
+    showPatch();
+    setStatus(resolved.warnings.join(' · '), 6000);
+  } catch (err) {
+    setStatus(`${docModules[path]?.name ?? path}: ${(err as Error).message}`, 0);
+  }
 }
 
 async function boot(): Promise<void> {
   if (!navigator.gpu) {
-    status.textContent = 'this browser has no WebGPU — try Chrome, Edge, or a recent Safari';
+    setStatus('this browser has no WebGPU — try Chrome, Edge, or a recent Safari', 0);
     return;
   }
   // Match the document to the window before the engine allocates textures.
@@ -375,24 +614,35 @@ async function boot(): Promise<void> {
   engine = await PaintEngine.create(canvas, DOC.width, DOC.height);
   engine.ensureLayer(layer.id);
 
-  const picker = $<HTMLSelectElement>('brush');
-  const paths = Object.keys(docModules)
-    .filter((p) => docModules[p]?.settings) // packs list brushes, they are not one
-    .sort();
-  for (const path of paths) {
-    const option = document.createElement('option');
-    option.value = path;
-    option.textContent = docModules[path].name ?? path;
-    picker.append(option);
-  }
-  picker.addEventListener('change', () => void selectBrush(picker.value));
-  if (paths.length === 0) {
-    status.textContent = 'no brush documents in brushes/';
+  renderLibrary();
+  if (LIBRARY.length === 0) {
+    setStatus('no brush documents in brushes/', 0);
     return;
   }
-  await selectBrush(paths[0]);
+  await selectBrush(LIBRARY[0].path);
   clear();
 }
+
+const search = $<HTMLInputElement>('search');
+search.addEventListener('input', renderLibrary);
+// arrow keys walk the filtered list without leaving the filter box: type two
+// letters, arrow to the one you meant
+search.addEventListener('keydown', (e) => {
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  e.preventDefault();
+  const at = shown.findIndex((entry) => entry.path === current);
+  const next = shown[Math.max(0, Math.min(shown.length - 1, at + (e.key === 'ArrowDown' ? 1 : -1)))];
+  if (next && next.path !== current) void selectBrush(next.path);
+});
+
+const menu = $<HTMLDetailsElement>('menu');
+menu.addEventListener('click', (e) => {
+  // a command is a one-shot; only the ground toggle is worth staying open for
+  if ((e.target as HTMLElement).tagName === 'BUTTON') menu.open = false;
+});
+document.addEventListener('pointerdown', (e) => {
+  if (menu.open && !menu.contains(e.target as Node)) menu.open = false;
+});
 
 $('clear').addEventListener('click', clear);
 $('dark').addEventListener('input', (e) => {
@@ -421,7 +671,7 @@ $('save').addEventListener('click', async () => {
 });
 $('copy').addEventListener('click', () => {
   void navigator.clipboard.writeText($('patch').textContent ?? '');
-  status.textContent = 'settings patch copied — paste it into the brush document';
+  setStatus('settings patch copied — paste it into the brush document');
 });
 
 void boot();

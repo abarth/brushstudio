@@ -59,6 +59,13 @@ export interface ResolvedBrush {
   name: string;
   notes: string;
   settings: BrushSettings;
+  /**
+   * Each `tips` / `patterns` name the document declared, against the id the
+   * engine now knows that bitmap by. The settings carry the engine ids, so
+   * this is what a UI needs to name a bitmap back to the designer — and to
+   * turn an edited setting back into the `@name` the document writes.
+   */
+  aliases: Record<string, string>;
   /** non-fatal problems worth reporting back to the designer */
   warnings: string[];
 }
@@ -261,5 +268,12 @@ export async function resolveBrush(
       `tip spacing ${(settings.tip.spacing * 100).toFixed(0)}% > 100% — dabs will not abut`,
     );
   }
-  return { id, name: doc.name ?? id, notes: doc.notes ?? '', settings, warnings };
+  return {
+    id,
+    name: doc.name ?? id,
+    notes: doc.notes ?? '',
+    settings,
+    aliases: Object.fromEntries(alias),
+    warnings,
+  };
 }
