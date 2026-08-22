@@ -94,11 +94,3 @@ export function writeOut(path, data) {
   writeFileSync(path, data);
   return path;
 }
-
-export function writePngDataUrl(path, dataUrl) {
-  return writeOut(path, Buffer.from(dataUrl.split(',')[1], 'base64'));
-}
-
-export function writeBase64(path, b64) {
-  return writeOut(path, Buffer.from(b64, 'base64'));
-}

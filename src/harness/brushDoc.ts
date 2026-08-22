@@ -83,6 +83,13 @@ function loadAbr(path: string, assets: AssetBag): ReturnType<typeof parseAbr> {
   return parsed;
 }
 
+/**
+ * Turns image bytes into a square alpha map. The browser has
+ * `createImageBitmap`; Node has to decode the file itself, so the decoder is
+ * injected rather than assumed.
+ */
+export type ImageDecoder = (bytes: ArrayBuffer) => Promise<GrayMap>;
+
 /** Decodes a grayscale image into a square alpha map (white = ink). */
 export async function imageToGrayMap(bytes: ArrayBuffer): Promise<GrayMap> {
   const bmp = await createImageBitmap(new Blob([bytes]));
@@ -168,6 +175,7 @@ export async function resolveBrush(
   doc: BrushDoc,
   assets: AssetBag,
   fallbackId = 'brush',
+  decodeImage: ImageDecoder = imageToGrayMap,
 ): Promise<ResolvedBrush> {
   const warnings: string[] = [];
   const id = doc.id ?? fallbackId;
@@ -182,7 +190,7 @@ export async function resolveBrush(
     if ('image' in src) {
       const asset = assets[src.image];
       if (!asset) throw new Error(`tip "${key}": asset not loaded: ${src.image}`);
-      registerTip(engineId, await imageToGrayMap(decodeBase64(asset.data)));
+      registerTip(engineId, await decodeImage(decodeBase64(asset.data)));
     } else {
       const abr = loadAbr(src.abr, assets);
       // an .abr names brushes, not tips, so look the tip up through its brush
@@ -208,7 +216,7 @@ export async function resolveBrush(
     if ('image' in src) {
       const asset = assets[src.image];
       if (!asset) throw new Error(`pattern "${key}": asset not loaded: ${src.image}`);
-      registerPattern(engineId, await imageToGrayMap(decodeBase64(asset.data)), key);
+      registerPattern(engineId, await decodeImage(decodeBase64(asset.data)), key);
     } else {
       const abr = loadAbr(src.abr, assets);
       const [, pat] = pick([...abr.patterns], src.pattern, `pattern in ${src.abr}`);

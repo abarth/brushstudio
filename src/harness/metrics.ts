@@ -1,6 +1,6 @@
 import type { PointerSample } from '../brush/dynamics';
 import type { BrushSettings } from '../brush/types';
-import { Surface } from './surface';
+import { cpuBackend, Surface, type BackendFactory } from './surface';
 
 /**
  * Numbers for the parts of a mark the eye is bad at.
@@ -322,7 +322,7 @@ const line = (
  */
 export async function measureBrush(
   settings: BrushSettings,
-  opts: { seeds?: number } = {},
+  opts: { seeds?: number; backend?: BackendFactory } = {},
 ): Promise<BrushMetrics> {
   const seeds = Math.max(1, opts.seeds ?? 4);
   const size = settings.tip.size;
@@ -331,7 +331,7 @@ export async function measureBrush(
   const w = runLen + pad * 2;
   const h = Math.ceil(size * 4 + 80);
   const step = Math.max(1.5, size / 14);
-  const surface = await Surface.create(w, h);
+  const surface = await Surface.create(w, h, opts.backend ?? cpuBackend);
   const warnings: string[] = [];
   const mid = h / 2;
 
@@ -438,6 +438,7 @@ export async function measureBrush(
     warnings.push('light and heavy pressure lay down nearly the same ink');
   }
 
+  surface.destroy();
   return {
     size,
     flat: {

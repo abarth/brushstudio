@@ -8,18 +8,12 @@
  *   npm run brush -- compare brushes/my-brush.json --ref refs/SomePack.abr#Chalk
  *   npm run brush -- export brushes/pack.json -o out/MyPack.abr
  *
- * Every command runs the real brush engine in a headless browser; see
- * tools/lib/page.mjs for why.
+ * Marks are painted by the CPU renderer unless `--backend gpu` asks for the
+ * WebGPU one; see docs/backends.md for what that choice means.
  */
 import { basename, join } from 'node:path';
-import { withHarness } from './lib/page.mjs';
-import {
-  loadAsset,
-  loadDocs,
-  writeBase64,
-  writeOut,
-  writePngDataUrl,
-} from './lib/docs.mjs';
+import { withBackend } from './lib/harness.mjs';
+import { loadAsset, loadDocs, writeOut } from './lib/docs.mjs';
 
 const argv = process.argv.slice(2);
 const command = argv[0];
@@ -46,20 +40,27 @@ const listFlag = (name) => {
   const v = flag(name);
   return typeof v === 'string' ? v.split(',').map((s) => s.trim()).filter(Boolean) : undefined;
 };
-/** `--strokes all` draws every test mark there is. */
-const strokeFlag = () => {
-  const list = listFlag('strokes');
-  return list?.length === 1 && list[0] === 'all' ? PLATE_STROKE_IDS : list;
-};
+const verbose = boolFlag('verbose');
+
+const BACKEND = flag('backend', 'cpu');
+if (BACKEND !== 'cpu' && BACKEND !== 'gpu') {
+  console.error(`error: unknown backend "${BACKEND}" — expected cpu or gpu`);
+  process.exit(1);
+}
+
+const OUT_DIR = flag('out-dir', 'out');
+const defaultOut = (name) => join(OUT_DIR, name);
+
 // Kept in step with src/harness/strokes.ts by the `list` command, which is
 // the only place the real catalogue is read.
 const PLATE_STROKE_IDS = [
   'dabs', 'flat', 'taper', 'ladder', 'curves', 'crosshatch', 'wash', 'tilt', 'speed',
 ];
-const verbose = boolFlag('verbose');
-
-const OUT_DIR = flag('out-dir', 'out');
-const defaultOut = (name) => join(OUT_DIR, name);
+/** `--strokes all` draws every test mark there is. */
+const strokeFlag = () => {
+  const list = listFlag('strokes');
+  return list?.length === 1 && list[0] === 'all' ? PLATE_STROKE_IDS : list;
+};
 
 const USAGE = `brushstudio — a harness for designing Photoshop brushes
 
@@ -75,6 +76,7 @@ const USAGE = `brushstudio — a harness for designing Photoshop brushes
 
 Common flags
   -o, --out <path>      where to write (default: ${OUT_DIR}/…)
+  --backend cpu|gpu     which renderer paints the marks (default: cpu)
   --json                machine-readable output
   --strokes a,b,c       which test marks to draw, or \`all\` (see \`list\`)
   --width <px>          plate width (default 1400)
@@ -82,7 +84,7 @@ Common flags
   --dark                light ink on a dark ground
   --annotate            print what each row is for
   --seeds <n>           how many seeds \`measure\` averages over (default 4)
-  --verbose             stream browser logs
+  --verbose             stream browser logs (--backend gpu)
 `;
 
 function fail(message) {
@@ -116,12 +118,12 @@ function reportWarnings(warnings) {
   for (const w of warnings) console.error(`  warning: ${w}`);
 }
 
+const run = (fn) => withBackend(BACKEND, fn, { verbose });
+
 async function main() {
   switch (command) {
     case 'list': {
-      const catalog = await withHarness((page) => page.evaluate(() => window.__brushstudio.catalog), {
-        verbose,
-      });
+      const catalog = await run((h) => h.catalog);
       if (boolFlag('json')) {
         console.log(JSON.stringify(catalog, null, 2));
         break;
@@ -139,19 +141,13 @@ async function main() {
 
     case 'tips': {
       const out = flag('out', defaultOut('builtin-tips.png'));
-      const sheet = await withHarness(
-        (page) =>
-          page.evaluate(
-            (dark) =>
-              window.__brushstudio.renderTipSheet(
-                window.__brushstudio.catalog.tips.map((t) => ({ id: t.id, label: t.label })),
-                { dark },
-              ),
-            boolFlag('dark'),
-          ),
-        { verbose },
+      const sheet = await run((h) =>
+        h.tipSheet(
+          h.catalog.tips.map((t) => ({ id: t.id, label: t.label })),
+          { dark: boolFlag('dark') },
+        ),
       );
-      writePngDataUrl(out, sheet.png);
+      writeOut(out, sheet.png);
       console.log(`wrote ${out}  ${sheet.width}x${sheet.height}  (${sheet.rows.length} tips)`);
       break;
     }
@@ -159,14 +155,7 @@ async function main() {
     case 'show': {
       if (positional.length === 0) fail('show needs at least one brush document');
       const { docs, assets } = loadDocs(positional);
-      const out = await withHarness(
-        (page) =>
-          page.evaluate(
-            ([docs, assets]) => window.__brushstudio.resolvedSettings(docs, assets),
-            [docs, assets],
-          ),
-        { verbose },
-      );
+      const out = await run((h) => h.resolvedSettings(docs, assets));
       if (boolFlag('json')) {
         console.log(JSON.stringify(out, null, 2));
         break;
@@ -185,15 +174,8 @@ async function main() {
       const stem =
         packs[0]?.name ?? `${docs[0].id}${docs.length > 1 ? `-and-${docs.length - 1}-more` : ''}`;
       const out = flag('out', defaultOut(`${String(stem).replace(/[^\w. -]+/g, '-')}.png`));
-      const result = await withHarness(
-        (page) =>
-          page.evaluate(
-            ([docs, assets, opts]) => window.__brushstudio.plate(docs, assets, opts),
-            [docs, assets, plateOptions()],
-          ),
-        { verbose },
-      );
-      writePngDataUrl(out, result.png);
+      const result = await run((h) => h.plate(docs, assets, plateOptions()));
+      writeOut(out, result.png);
       console.log(`wrote ${out}  ${result.width}x${result.height}  (${docs.length} brush(es))`);
       reportWarnings(result.warnings);
       break;
@@ -203,19 +185,10 @@ async function main() {
       if (positional.length === 0) fail('compare needs at least one brush document');
       if (!flags.has('ref')) fail('compare needs --ref <file.abr>[#brush]');
       const { docs, assets } = loadDocs(positional);
-      const refSpecs = String(flag('ref')).split(',');
-      const refs = refSpecs.map((spec) => parseRef(spec, assets));
+      const refs = String(flag('ref')).split(',').map((spec) => parseRef(spec, assets));
       const out = flag('out', defaultOut(`${docs[0].id}-vs-ref.png`));
-      const result = await withHarness(
-        (page) =>
-          page.evaluate(
-            ([docs, assets, refs, opts]) =>
-              window.__brushstudio.comparePlate(docs, assets, refs, opts),
-            [docs, assets, refs, plateOptions()],
-          ),
-        { verbose },
-      );
-      writePngDataUrl(out, result.png);
+      const result = await run((h) => h.comparePlate(docs, assets, refs, plateOptions()));
+      writeOut(out, result.png);
       console.log(`wrote ${out}  ${result.width}x${result.height}`);
       for (const row of result.rows) console.log(`  ${row}`);
       break;
@@ -225,14 +198,7 @@ async function main() {
       if (positional.length === 0) fail('measure needs at least one brush document');
       const { docs, assets } = loadDocs(positional);
       const seeds = numFlag('seeds', 4);
-      const rows = await withHarness(
-        (page) =>
-          page.evaluate(
-            ([docs, assets, opts]) => window.__brushstudio.measure(docs, assets, opts),
-            [docs, assets, { seeds }],
-          ),
-        { verbose },
-      );
+      const rows = await run((h) => h.measure(docs, assets, { seeds }));
       if (boolFlag('json')) {
         console.log(JSON.stringify(rows, null, 2));
         break;
@@ -277,81 +243,65 @@ async function main() {
       if (positional.length === 0) fail('inspect needs an .abr file');
       const assets = {};
       const path = loadAsset(positional[0], assets);
-      const result = await withHarness(
-        async (page) => {
-          const report = await page.evaluate(
-            ([b64, path]) => window.__brushstudio.inspectAbr(b64, path),
-            [assets[path].data, basename(path)],
-          );
-          const extra = {};
-          if (flags.has('tips')) {
-            extra.tipSheet = await page.evaluate(
-              ([tips, path]) =>
-                window.__brushstudio.renderTipSheet(
-                  tips.map((t) => ({ id: `abr:${path}:${t.id}`, label: t.id.slice(0, 8) })),
-                ),
-              [report.tips, basename(path)],
-            );
-          }
-          if (flags.has('render')) {
-            extra.plate = await page.evaluate(
-              ([b64, path, want, opts]) =>
-                window.__brushstudio.renderPlate(
-                  window.__brushstudio.abrEntries(b64, path, want),
-                  opts,
-                ),
-              [
-                assets[path].data,
-                basename(path),
-                flags.has('only')
-                  ? /^\d+$/.test(flag('only'))
-                    ? Number(flag('only'))
-                    : flag('only')
-                  : undefined,
-                plateOptions(),
-              ],
-            );
-          }
-          return { report, extra };
-        },
-        { verbose },
-      );
+      const bytes = Buffer.from(assets[path].data, 'base64');
+      const only = flags.has('only')
+        ? /^\d+$/.test(flag('only'))
+          ? Number(flag('only'))
+          : flag('only')
+        : undefined;
 
-      if (flags.has('tips')) {
+      const { report, tipSheet, plate } = await run(async (h) => {
+        const report = await h.inspectAbr(bytes, basename(path));
+        const extra = {};
+        if (flags.has('tips')) {
+          extra.tipSheet = await h.tipSheet(
+            report.tips.map((t) => ({ id: `abr:${basename(path)}:${t.id}`, label: t.id.slice(0, 8) })),
+          );
+        }
+        if (flags.has('render')) {
+          const entries = await h.abrEntries(bytes, basename(path), only, basename(path));
+          extra.plate = await h.renderEntries(entries, plateOptions());
+        }
+        return { report, ...extra };
+      });
+
+      if (tipSheet) {
         const p = flag('tips') === true ? defaultOut('tips.png') : flag('tips');
-        writePngDataUrl(p, result.extra.tipSheet.png);
+        writeOut(p, tipSheet.png);
         console.error(`wrote ${p}`);
       }
-      if (flags.has('render')) {
+      if (plate) {
         const p = flag('render') === true ? defaultOut('abr-plate.png') : flag('render');
-        writePngDataUrl(p, result.extra.plate.png);
+        writeOut(p, plate.png);
         console.error(`wrote ${p}`);
       }
       if (boolFlag('json')) {
-        console.log(JSON.stringify(result.report, null, 2));
+        console.log(JSON.stringify(report, null, 2));
         break;
       }
-      const r = result.report;
-      console.log(`${basename(path)} — ABR v${r.version}`);
-      console.log(`${r.brushes.length} brush(es), ${r.tips.length} tip(s), ${r.patterns.length} pattern(s)\n`);
-      for (const b of r.brushes) {
+      console.log(`${basename(path)} — ABR v${report.version}`);
+      console.log(
+        `${report.brushes.length} brush(es), ${report.tips.length} tip(s), ` +
+          `${report.patterns.length} pattern(s)\n`,
+      );
+      for (const b of report.brushes) {
         console.log(`  [${b.index}] ${b.name}`);
         console.log(`      ${b.summary}`);
       }
       console.log('\ntips');
-      for (const t of r.tips) {
+      for (const t of report.tips) {
         console.log(
           `  ${t.id.slice(0, 10).padEnd(12)} ${String(t.size).padStart(4)}px  ` +
             `coverage ${t.coverage.toFixed(3)}  mean ${t.meanAlpha.toFixed(3)}`,
         );
       }
-      if (r.patterns.length) {
+      if (report.patterns.length) {
         console.log('\npatterns');
-        for (const p of r.patterns) {
+        for (const p of report.patterns) {
           console.log(`  ${p.id.slice(0, 10).padEnd(12)} ${String(p.size).padStart(4)}px  ${p.name}`);
         }
       }
-      console.log('\nrun again with --json for every brush\'s settings as a patch');
+      console.log("\nrun again with --json for every brush's settings as a patch");
       break;
     }
 
@@ -360,15 +310,8 @@ async function main() {
       const { docs, assets, packs } = loadDocs(positional);
       const name = packs[0]?.name ?? docs[0].id;
       const out = flag('out', defaultOut(`${String(name).replace(/[^\w. -]+/g, '-')}.abr`));
-      const result = await withHarness(
-        (page) =>
-          page.evaluate(
-            ([docs, assets]) => window.__brushstudio.exportAbr(docs, assets),
-            [docs, assets],
-          ),
-        { verbose },
-      );
-      writeBase64(out, result.abr);
+      const result = await run((h) => h.exportAbr(docs, assets));
+      writeOut(out, result.abr);
       console.log(
         `wrote ${out} — ${(result.bytes / 1024).toFixed(0)} KB, ${result.names.length} brush(es), ` +
           `${result.tips} tip(s), ${result.patterns} pattern(s)`,

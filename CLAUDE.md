@@ -18,6 +18,7 @@ Then, as needed:
 | `docs/parameters.md` | what the knobs do, and the ratios between them that actually decide a mark |
 | `docs/brush-format.md` | the brush document format |
 | `docs/abr.md` | studying and shipping Photoshop packs |
+| `docs/backends.md` | the two renderers, and when the default is the wrong one |
 | `docs/provenance.md` | what came from northlight, and how to keep it in sync |
 
 ## Commands
@@ -32,13 +33,18 @@ npm run brush -- compare brushes/x.json --ref refs/P.abr#"Name"
 npm run brush -- inspect refs/P.abr --json             # read a pack apart
 npm run brush -- export  brushes/pack.json -o out/P.abr
 npm run dev                                            # paint with it by hand
-npm test                                               # engine + harness checks
+
+npm test                 # the harness suite, CPU renderer (~4s)
+npm run test:gpu         # the same suite through WebGPU (minutes)
+npm run test:parity      # do the two renderers still agree
 npm run typecheck
 ```
 
-Every command runs the real WebGPU engine in headless Chromium, so a render
-takes tens of seconds rather than milliseconds. Batch work into one command
-where you can, and do not poll a render in a loop.
+Commands paint with the CPU renderer by default and run entirely in this
+process: a measure is about a second, a four-brush plate about five. Add
+`--backend gpu` to run the same work through the WebGPU engine in headless
+Chromium — minutes rather than seconds, and the reference when a mark's
+correctness is in question. `docs/backends.md` explains the split.
 
 ## House rules
 
@@ -56,6 +62,10 @@ where you can, and do not poll a render in a loop.
 * **`src/brush/` and `src/gpu/` are extracted verbatim.** Fix a
   Photoshop-parity bug there only with a matching upstream fix in mind, and
   note it in `docs/provenance.md`.
+* **Two renderers, one behaviour.** Touching `src/gpu/shaders.ts` or
+  `src/engine/cpu/` means running `npm run test:parity`. The WebGPU engine
+  is the reference; the CPU one is a transliteration and drifts if nothing
+  checks it.
 * **Reference packs are licensed work.** `refs/` is gitignored; do not
   commit someone else's `.abr`, and check the licence before shipping a
   borrowed tip bitmap.

@@ -1,4 +1,4 @@
-import type { PaintEngine } from './engine';
+import type { StampTarget } from '../engine/types';
 import type { BrushSettings } from '../brush/types';
 import {
   dualSpacingPx,
@@ -30,7 +30,7 @@ const zeroRng = () => 0;
  * per-stamp dynamics (via brush/dynamics.ts).
  */
 export class StrokeSession {
-  private engine: PaintEngine;
+  private engine: StampTarget;
   private settings: BrushSettings;
   private fg: HSV;
   private bg: HSV;
@@ -65,7 +65,7 @@ export class StrokeSession {
    */
   private pendingDown: PointerSample | null = null;
 
-  constructor(engine: PaintEngine, settings: BrushSettings, opts: StrokeSessionOptions) {
+  constructor(engine: StampTarget, settings: BrushSettings, opts: StrokeSessionOptions) {
     this.engine = engine;
     this.settings = settings;
     this.fg = opts.fg;

@@ -1,16 +1,20 @@
 import { engineStrokeParams } from '../brush/engineParams';
 import type { PointerSample } from '../brush/dynamics';
 import type { BrushSettings } from '../brush/types';
+import { CpuPaintEngine } from '../engine/cpu/engine';
+import { GpuBackend } from '../engine/gpu';
+import type { BackendId, PaintBackend } from '../engine/types';
 import { PaintEngine } from '../gpu/engine';
 import { StrokeSession } from '../gpu/stroke';
-import { makeLayerMeta, type HSV, type LayerMeta } from '../types';
+import type { HSV } from '../types';
 
 /**
- * A headless painting surface: one document-sized layer plus everything
- * needed to lay a stroke on it and read the pixels back.
+ * A headless painting surface: one layer, plus everything needed to lay a
+ * stroke on it and read the pixels back.
  *
- * The engine is a real GPU engine, so it wants a canvas even when nothing is
- * ever presented to the screen; an unattached one is enough.
+ * Which renderer does the work is a parameter. Everything above this line —
+ * spacing, dynamics, the marks, the measurements — is the same either way,
+ * which is what makes the two comparable and the parity test meaningful.
  */
 
 export interface PaintOptions {
@@ -22,6 +26,23 @@ export interface PaintOptions {
   seed?: number;
   /** erase instead of paint */
   erase?: boolean;
+}
+
+export type BackendFactory = (width: number, height: number) => Promise<PaintBackend>;
+
+export const cpuBackend: BackendFactory = async (width, height) =>
+  new CpuPaintEngine(width, height);
+
+/** Needs a browser: WebGPU wants a device, and a device wants a canvas. */
+export const gpuBackend: BackendFactory = async (width, height) => {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1;
+  canvas.height = 1;
+  return new GpuBackend(await PaintEngine.create(canvas, width, height));
+};
+
+export function backendFactory(id: BackendId): BackendFactory {
+  return id === 'gpu' ? gpuBackend : cpuBackend;
 }
 
 const DEFAULT_FG: HSV = { h: 24, s: 0.66, v: 0.22 };
@@ -42,41 +63,40 @@ function mulberry32(seed: number): () => number {
 export class Surface {
   readonly width: number;
   readonly height: number;
-  private engine: PaintEngine;
-  private layer: LayerMeta;
+  private backend: PaintBackend;
+  private layerId = 'paint';
   private seq = 0;
 
-  private constructor(engine: PaintEngine, width: number, height: number) {
-    this.engine = engine;
+  private constructor(backend: PaintBackend, width: number, height: number) {
+    this.backend = backend;
     this.width = width;
     this.height = height;
-    this.layer = makeLayerMeta({ id: 'paint', name: 'paint' });
-    engine.ensureLayer(this.layer.id);
+    backend.ensureLayer(this.layerId);
   }
 
-  static async create(width: number, height: number): Promise<Surface> {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1;
-    canvas.height = 1;
-    const engine = await PaintEngine.create(canvas, width, height);
-    return new Surface(engine, width, height);
+  static async create(
+    width: number,
+    height: number,
+    backend: BackendFactory = cpuBackend,
+  ): Promise<Surface> {
+    return new Surface(await backend(width, height), width, height);
   }
 
   /** Paints the layer a flat colour; omit for a transparent ground. */
   fill(rgba: [number, number, number, number]): void {
-    this.engine.fillLayer(this.layer.id, rgba);
+    this.backend.fillLayer(this.layerId, rgba);
   }
 
   clear(): void {
-    this.engine.fillLayer(this.layer.id, [0, 0, 0, 0]);
+    this.backend.fillLayer(this.layerId, [0, 0, 0, 0]);
   }
 
   /** Lays one stroke down, exactly as the app would from pointer events. */
   paint(settings: BrushSettings, samples: PointerSample[], opts: PaintOptions = {}): void {
     if (samples.length === 0) return;
     const mode = opts.erase ? 'erase' : 'paint';
-    this.engine.beginStroke(engineStrokeParams(settings, mode));
-    const session = new StrokeSession(this.engine, settings, {
+    this.backend.beginStroke(engineStrokeParams(settings, mode));
+    const session = new StrokeSession(this.backend, settings, {
       fg: opts.fg ?? DEFAULT_FG,
       bg: opts.bg ?? DEFAULT_BG,
       rng: mulberry32((opts.seed ?? 1) * 7919 + this.seq++ * 104729),
@@ -84,16 +104,12 @@ export class Surface {
     session.down(samples[0]);
     if (samples.length > 1) session.move(samples.slice(1));
     session.up();
-    this.engine.endStroke(this.layer.id);
+    this.backend.endStroke(this.layerId);
   }
 
-  /** Flattened document pixels, premultiplied RGBA. */
+  /** Document pixels, premultiplied RGBA. */
   read(): Promise<Uint8Array> {
-    return this.engine.readComposite({
-      layers: [this.layer],
-      activeLayerId: this.layer.id,
-      view: { zoom: 1, panX: 0, panY: 0 },
-    });
+    return this.backend.readLayer(this.layerId);
   }
 
   /**
@@ -106,5 +122,9 @@ export class Surface {
     const out = new Uint8Array(this.width * this.height);
     for (let i = 0; i < out.length; i++) out[i] = rgba[i * 4 + 3];
     return out;
+  }
+
+  destroy(): void {
+    this.backend.destroy?.();
   }
 }

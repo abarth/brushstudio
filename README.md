@@ -39,6 +39,10 @@ So the harness is built to make everything *except* the judgement cheap:
   a spectral test for stamp repetition, worst gap, pressure response,
   build-up over repeated passes, and how much the mark moves between seeds.
 * **A real `.abr` at the end**, verified by reading its own bytes back.
+* **A renderer that suits the loop.** Marks are painted in-process by a CPU
+  renderer, so a measurement is a second rather than a wait; the WebGPU
+  engine the interactive app uses is a flag away, and a parity test keeps
+  the two honest. See `docs/backends.md`.
 
 ## The loop
 
@@ -69,9 +73,9 @@ brush document, instead of a description that has to be re-guessed.
 | `npm run dev` | paint with it by hand |
 | `npm test` | the harness still tells the truth |
 
-Everything runs the real WebGPU engine in headless Chromium — including on a
-machine with no GPU, via SwiftShader. A render takes tens of seconds, not
-milliseconds.
+Add `--backend gpu` to any command to paint with the WebGPU engine in
+headless Chromium instead of the in-process CPU renderer — slower, and the
+reference when a mark's correctness is in question.
 
 ## Studying other people's brushes
 

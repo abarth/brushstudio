@@ -32,6 +32,10 @@ jobs:
       - name: Typecheck and build
         run: npm run build
 
+      # The CPU renderer needs no browser, so this runs first and fails fast.
+      - name: Run the harness test suite
+        run: npm test
+
       - name: Get Playwright version
         id: playwright
         run: echo "version=$(node -e "console.log(require('playwright/package.json').version)")" >> "$GITHUB_OUTPUT"
@@ -51,11 +55,15 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
 
-      # The harness renders with the real WebGPU engine; runners have no GPU,
-      # so Chromium falls back to SwiftShader (see tools/lib/page.mjs, which
-      # already passes the flags).
-      - name: Run the harness test suite
-        run: npm test
+      # Runners have no GPU, so Chromium falls back to SwiftShader (see
+      # tools/lib/page.mjs, which already passes the flags).
+      - name: Run the same suite on the WebGPU renderer
+        run: npm run test:gpu
+
+      # The CPU renderer is a transliteration of the shaders; this is what
+      # notices when the two drift apart.
+      - name: Check the renderers still agree
+        run: npm run test:parity
 
       - name: Check the starter pack still exports
         run: npm run brush -- export brushes/starter-pack.json -o out/Starters.abr

@@ -27,9 +27,9 @@ export interface TestStroke {
   reveals: string;
   /**
    * Natural row height in document pixels. `size` is the tip diameter;
-   * `reach` is how far the brush can actually throw ink, which scatter and
-   * the dual train make much larger — a row sized to the tip alone would
-   * have a spatter brush spilling into its neighbours.
+   * `reach` is how far the brush can actually throw ink, which Scattering
+   * makes much larger — a row sized to the tip alone would have a spatter
+   * brush spilling into its neighbours.
    */
   rowHeight: (size: number, reach: number) => number;
   paths: (box: StrokeBox, size: number, reach: number) => PointerSample[][];
@@ -250,12 +250,11 @@ export function findStroke(id: string): TestStroke | undefined {
 export function brushReach(settings: {
   tip: { size: number };
   scatter: { enabled: boolean; scatter: number };
-  dual: { enabled: boolean; size: number; scatter: number };
 }): number {
+  // Only Scattering moves ink away from the path. The dual brush reaches
+  // wider and scatters harder, but its train is a mask: it can subtract
+  // coverage from a dab, never add any outside one.
   const scatter = settings.scatter.enabled ? settings.scatter.scatter : 0;
-  const dual = settings.dual.enabled
-    ? Math.max(settings.dual.size / settings.tip.size - 1, 0) + settings.dual.scatter
-    : 0;
   // Capped: a 1000% scatter is legal and would make a plate unreadable.
-  return settings.tip.size * Math.min(1 + Math.max(scatter, dual), 4);
+  return settings.tip.size * Math.min(1 + scatter, 4);
 }

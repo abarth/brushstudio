@@ -84,6 +84,11 @@ Keep `--seed` fixed while iterating, so a change in the plate is a change in
 the brush. Vary the seed only when you are specifically testing whether the
 brush survives bad luck.
 
+Plates and measurements come from the CPU renderer, which takes a second or
+two. If a mark looks wrong in a way you suspect is the harness rather than
+the brush, redraw it with `--backend gpu`: that is the renderer the
+interactive app uses, and it decides. See `docs/backends.md`.
+
 ## 6. Review — the human step
 
 Send the plate. Keep the note short and make it easy to answer:
