@@ -88,12 +88,15 @@ function targetPower(k) {
 const lambda = makeLambda();
 /**
  * Max scatter offset in tip pixels: S = scatter × (tip diameter)/2, scaled
- * to native. The tip rides the DUAL train in this family — the mask is what
- * carries the texture — so its kernel is the dual scatter.
+ * to native. The tip rides the DUAL train in a gated family — the mask is
+ * what carries the texture — so its kernel is the dual scatter. A pattern
+ * spec (`output: "pattern"`) is canvas-anchored: no train, no kernel,
+ * H ≡ 1.
  */
-const S_TIP = spec.train.dual.scatter * (N / 2);
+const S_TIP = spec.train?.dual ? spec.train.dual.scatter * (N / 2) : 0;
 /** Scatter transfer H(f) = 1 − Λ(2πfS)² — the kernel we deconvolve by. */
 function scatterTransfer(fPerPx) {
+  if (!S_TIP) return 1;
   const L = lambda(2 * Math.PI * fPerPx * S_TIP);
   return Math.max(1e-4, 1 - L * L);
 }
@@ -222,6 +225,7 @@ const coarseField = (() => {
 })();
 
 const vignette = (() => {
+  if (!spec.vignette) return null; // pattern specs never stamp, never tear
   const { inner, rag } = spec.vignette;
   const out = new Float64Array(N * N);
   const c = (N - 1) / 2;
@@ -425,6 +429,25 @@ const t0 = Date.now();
 console.log(`synthesizing ${spec.name}: ${N}px field, β=${sp.beta}, knee ${sp.kneeCyclesPerDia} c/dia`);
 const baseAmp = buildAmp(null);
 const baseField = synthField(baseAmp);
+
+if (spec.output === 'pattern') {
+  // A texture-channel pattern: tileable by FFT construction, no vignette,
+  // no threshold. Rank-equalize the field to a uniform histogram so the
+  // subtract-mode contact model (docs §9: inked where v > 1 − a) turns the
+  // pattern's value distribution into an identity — stroke coverage then
+  // tracks accumulated alpha directly, and the pressure curve is designed
+  // entirely in the brush document's flow mapping.
+  const order = Array.from(baseField.keys()).sort((i, j) => baseField[i] - baseField[j]);
+  const data = new Uint8Array(N * N);
+  for (let rank = 0; rank < order.length; rank++) {
+    data[order[rank]] = Math.round((rank / (order.length - 1)) * 255);
+  }
+  const out = join(outDir, `${spec.name}.png`);
+  writeFileSync(out, encodeGrayPng(data, N, N));
+  console.log(`  ${out}  (tileable pattern, equalized)  in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+  process.exit(0);
+}
+
 const baseSorted = plateauSorted(baseField);
 
 const harness = CALIBRATE ? await loadCpuHarness() : null;

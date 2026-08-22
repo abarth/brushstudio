@@ -1,0 +1,17 @@
+{
+  "name": "charcoal-tooth",
+  "notes": "Tileable paper-tooth height field for the charcoal brushes: the texture channel's subtract mode makes stroke alpha a press-depth against this field (docs/fractal-texture-math.md contact model). Rank-equalized so coverage tracks accumulated alpha one-to-one; the pressure response curve therefore lives entirely in the brush documents' flow mapping, and this file only sets the tooth's spatial character. Canvas-anchored and 1024px square, so overlapping strokes share their grain and the tile repeat sits at canvas scale.",
+  "output": "pattern",
+  "native": 2048,
+  "seed": 20260823,
+  "spectrum": {
+    "shoulderCyclesPerDia": 30,
+    "lowSlope": 1.2,
+    "beta": 1.7,
+    "kneeCyclesPerDia": 360,
+    "beta2": 3.0,
+    "cutCyclesPerDia": 880,
+    "taperCyclesPerDia": 1000,
+    "bandLoCyclesPerDia": 6
+  }
+}
