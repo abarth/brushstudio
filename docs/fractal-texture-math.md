@@ -326,6 +326,14 @@ each keyed by `field.kind`:
   method — a sum of random half-plane steps. At low counts the fault lines
   survive as straight facet edges and level sets are polygonal; at high
   counts it converges toward a smooth fractal field.
+* `scratches` (worn metal): a point process of finite, gently bent line
+  segments, isotropic in orientation, lengths/widths/depths heavy-tailed —
+  a wear history rather than a manufactured brushing (which is just
+  `stretchX`). Sparse thresholds keep only the deepest gouges.
+* `domains` (plank wood, parquet, end grain): coarse Worley domains, each
+  filled with elongated angular sub-cells (stretched Worley) aligned to
+  that domain's own random orientation. Per-domain stretch is the point — a
+  single global stretch cannot vary orientation across the surface.
 * `banded` (wood rings, onyx, damascus): the Perlin-marble construction
   `cos(carrier + turbulence)` — a striped or ringed carrier phase-modulated
   by a field with this spec's spectrum. The carrier alone is a spectral

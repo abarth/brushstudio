@@ -410,16 +410,30 @@ function faultsField(f) {
   const rng = mulberry32(spec.seed + 307);
   const out = new Float64Array(N * N);
   const M = f.count ?? 200;
+  // stepAmp scales the half-plane offsets (the mottle); lineWeight lays an
+  // explicit ridge of ink ALONG each fault trace, width heavy-tailed in
+  // [lineWidthMin, lineWidthMax] px. High lineWeight with low stepAmp is
+  // the "linear elements crosscutting a quiet field" reading.
+  const stepAmp = f.stepAmp ?? 1;
   for (let m = 0; m < M; m++) {
     const th = rng() * Math.PI * 2;
     const nx = Math.cos(th);
     const ny = Math.sin(th);
     const d = nx * (rng() * N) + ny * (rng() * N);
-    const a = 1 + (f.ampJitter ?? 0.5) * (rng() * 2 - 1);
+    const a = stepAmp * (1 + (f.ampJitter ?? 0.5) * (rng() * 2 - 1));
+    const lw = f.lineWeight
+      ? f.lineWeight * (0.35 + 0.65 * rng())
+      : 0;
+    const wLo = f.lineWidthMin ?? 1.2;
+    const wHi = f.lineWidthMax ?? 6;
+    const w = wLo * Math.pow(wHi / wLo, Math.pow(rng(), 2));
     for (let y = 0; y < N; y++) {
       const rowDot = ny * y - d;
       for (let x = 0; x < N; x++) {
-        out[y * N + x] += nx * x + rowDot > 0 ? a : -a;
+        const dist = nx * x + rowDot;
+        let v = dist > 0 ? a : -a;
+        if (lw) v += lw * Math.exp(-(dist * dist) / (w * w));
+        out[y * N + x] += v;
       }
     }
   }
@@ -465,6 +479,135 @@ function bandedField(f) {
       const u = f.rings ? Math.hypot(x - cx, (y - cy) * oval) / N : x / N;
       const c = Math.cos(2 * Math.PI * (f.bands * u + f.warp * W[i]));
       out[i] = gamma === 1 ? c : Math.sign(c) * Math.pow(Math.abs(c), gamma);
+    }
+  }
+  let mean = 0;
+  for (const v of out) mean += v;
+  mean /= out.length;
+  let vari = 0;
+  for (let i = 0; i < out.length; i++) {
+    out[i] -= mean;
+    vari += out[i] * out[i];
+  }
+  const inv = 1 / Math.sqrt(vari / out.length || 1);
+  for (let i = 0; i < out.length; i++) out[i] *= inv;
+  return out;
+}
+
+/**
+ * Scratch field (field.kind: "scratches"): wear and tear — a point process
+ * of finite line segments (gently bent), isotropic in orientation, with
+ * heavy-tailed lengths, widths and depths: many faint hairlines, a few long
+ * deep gouges. Ink = scratch marks, so sparse thresholds keep only the
+ * deepest history of abuse. This is worn metal; manufactured brushing is
+ * the spectral stretchX route instead.
+ */
+function scratchesField(f) {
+  const rng = mulberry32(spec.seed + 401);
+  const out = new Float64Array(N * N);
+  const heavy = (lo, hi, pow) => lo * Math.pow(hi / lo, Math.pow(rng(), pow ?? 2));
+  const count = f.count ?? 400;
+  for (let m = 0; m < count; m++) {
+    const L = heavy(f.lenMin * N, f.lenMax * N);
+    const w = heavy(f.widthMin ?? 1.2, f.widthMax ?? 5);
+    const depth = 0.4 + 0.6 * rng();
+    const th = rng() * Math.PI * 2;
+    const ax = rng() * N;
+    const ay = rng() * N;
+    const bx = ax + L * Math.cos(th);
+    const by = ay + L * Math.sin(th);
+    const bend = (f.curvature ?? 0.08) * L * (rng() * 2 - 1);
+    const cx = (ax + bx) / 2 - Math.sin(th) * bend;
+    const cy = (ay + by) / 2 + Math.cos(th) * bend;
+    const steps = Math.max(2, Math.ceil(L / (0.75 * w)));
+    const r = Math.ceil(2 * w);
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps;
+      const px = (1 - t) * (1 - t) * ax + 2 * t * (1 - t) * cx + t * t * bx;
+      const py = (1 - t) * (1 - t) * ay + 2 * t * (1 - t) * cy + t * t * by;
+      const x0 = Math.max(0, Math.floor(px - r));
+      const x1 = Math.min(N - 1, Math.ceil(px + r));
+      const y0 = Math.max(0, Math.floor(py - r));
+      const y1 = Math.min(N - 1, Math.ceil(py + r));
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+          const d2 = (x - px) * (x - px) + (y - py) * (y - py);
+          out[y * N + x] += depth * Math.exp(-d2 / (w * w));
+        }
+      }
+    }
+  }
+  if (f.fbmWeight) {
+    let vari = 0;
+    for (const v of out) vari += v * v;
+    const sd = Math.sqrt(vari / out.length) || 1;
+    const fbm = synthField(buildAmp(null), makePhases(spec.seed + 7));
+    for (let i = 0; i < out.length; i++) out[i] = out[i] / sd + f.fbmWeight * fbm[i];
+  }
+  let mean = 0;
+  for (const v of out) mean += v;
+  mean /= out.length;
+  let vari = 0;
+  for (let i = 0; i < out.length; i++) {
+    out[i] -= mean;
+    vari += out[i] * out[i];
+  }
+  const inv = 1 / Math.sqrt(vari / out.length || 1);
+  for (let i = 0; i < out.length; i++) out[i] *= inv;
+  return out;
+}
+
+/**
+ * Oriented-domain field (field.kind: "domains"): coarse Worley domains,
+ * each filled with ELONGATED angular sub-cells (stretched Worley) aligned
+ * to that domain's own random orientation — grain patches in a plank, each
+ * running its own way, meeting at angular boundaries. The narrow-aspect
+ * sub-cells are what a single global stretch cannot give: stretch is per
+ * domain here, so orientation varies across the surface.
+ */
+function domainsField(f) {
+  const rng = mulberry32(spec.seed + 503);
+  const coarse = makeWorley(rng, f.cells ?? 6);
+  const sub = makeWorley(rng, f.subCells ?? 24);
+  const fbm = f.fbmWeight ? synthField(buildAmp(null), makePhases(spec.seed + 7)) : null;
+  let wx = null;
+  let wy = null;
+  if (f.warp) {
+    const warpAmp = new Float64Array(N * N);
+    for (let y = 0; y < N; y++) {
+      const fy = binFreq(y, N);
+      for (let x = 0; x < N; x++) {
+        const k = Math.hypot(binFreq(x, N), fy) * N;
+        if (k > 0 && k <= 4) warpAmp[y * N + x] = 1 / (1 + k * k);
+      }
+    }
+    wx = synthField(warpAmp, makePhases(spec.seed + 13));
+    wy = synthField(warpAmp, makePhases(spec.seed + 17));
+  }
+  const aspect = f.aspect ?? 4;
+  const out = new Float64Array(N * N);
+  for (let y = 0; y < N; y++) {
+    const v0 = y / N;
+    for (let x = 0; x < N; x++) {
+      const i = y * N + x;
+      const u = x / N + (wx ? f.warp * wx[i] : 0);
+      const v = v0 + (wy ? f.warp * wy[i] : 0);
+      const dom = worley(coarse, u, v);
+      // the domain's own orientation, a pure function of its random value
+      const th = dom.v * Math.PI;
+      const cs = Math.cos(th);
+      const sn = Math.sin(th);
+      const du = u - 0.5;
+      const dv = v - 0.5;
+      const ua = 0.5 + (du * cs + dv * sn) / aspect; // compressed along grain
+      const va = 0.5 + (-du * sn + dv * cs);
+      const cell = worley(sub, ua, va);
+      let s =
+        ((f.domainWeight ?? 0.5) * (dom.v - 0.5)) / 0.2887 +
+        ((f.cellWeight ?? 1) * (cell.v - 0.5)) / 0.2887;
+      if (f.wallDepth) s -= f.wallDepth * smoothstep(f.wallWidth ?? 0.06, 0, dom.f2 - dom.f1);
+      if (fbm) s += f.fbmWeight * fbm[i];
+      out[i] = s;
     }
   }
   let mean = 0;
@@ -769,6 +912,8 @@ const baseField =
   : FIELD_KIND === 'veins' ? veinsField(spec.field)
   : FIELD_KIND === 'faults' ? faultsField(spec.field)
   : FIELD_KIND === 'banded' ? bandedField(spec.field)
+  : FIELD_KIND === 'scratches' ? scratchesField(spec.field)
+  : FIELD_KIND === 'domains' ? domainsField(spec.field)
   : synthField(buildAmp(null));
 
 if (spec.output === 'pattern') {
