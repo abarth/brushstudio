@@ -35,16 +35,17 @@ npm run brush -- export  brushes/pack.json -o out/P.abr
 npm run dev                                            # paint with it by hand
 
 npm test                 # the harness suite, CPU renderer (~4s)
-npm run test:gpu         # the same suite through WebGPU (minutes)
+npm run test:gpu         # the same suite through WebGPU (~30s)
 npm run test:parity      # do the two renderers still agree
 npm run typecheck
 ```
 
 Commands paint with the CPU renderer by default and run entirely in this
-process: a measure is about a second, a four-brush plate about five. Add
+process: a measure is a few seconds, a four-brush plate about six. Add
 `--backend gpu` to run the same work through the WebGPU engine in headless
-Chromium — minutes rather than seconds, and the reference when a mark's
-correctness is in question. `docs/backends.md` explains the split.
+Chromium — several times slower, and the reference when a mark's correctness
+is in question. Ask it for one brush and the rows you need rather than a
+whole pack; `docs/backends.md` explains the split and why that matters.
 
 ## House rules
 

@@ -57,8 +57,9 @@ Spending a review round on the first column is the main way this goes slow.
 
 * Commands use the CPU renderer and take a second or two, so iterate freely.
   `--backend gpu` runs the same work through WebGPU in headless Chromium —
-  minutes, not seconds — and is the reference when a mark looks wrong;
-  `docs/backends.md` has the details.
+  several times slower, and the reference when a mark looks wrong. Ask it
+  for one brush and the rows you need, not a whole pack; `docs/backends.md`
+  says why.
 * Hardness only shapes the round tip. Edge hardness comes from
   **flow ÷ spacing** — see `docs/parameters.md`.
 * Non-repetition comes from **scatter ÷ spacing**, and scatter must be on

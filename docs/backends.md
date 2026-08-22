@@ -18,10 +18,16 @@ most sandboxes are actually in:
 | `measure` the four starter brushes, 3 seeds | 4.3s | 20s |
 | `render` one brush, four rows, no crosshatch | 1.8s | 7.2s |
 | `render` the four-brush pack, every row | 6.6s | many minutes |
-| the test suite (21 cases) | 3.5s | minutes |
+| the test suite (21 cases) | 3.5s | 26s |
+| the parity check (10 brushes, both renderers) | — | 11s |
 
-That last row is a different order of magnitude, and the reason is worth
-knowing because it is not about fill rate. Baking a stroke into its layer is
+A GitHub Actions runner — four cores, also no GPU — puts the last two at 34s
+and 9s, so these are not the numbers of an unusually slow machine. Only the
+pack plate row is the sort of thing that would look different on real
+hardware, and it is already the row you are told not to ask for.
+
+The pack plate is the one row that is a different order of magnitude, and
+the reason is worth knowing because it is not about fill rate. Baking a stroke into its layer is
 a **fullscreen pass** on the GPU: it costs the same whether the stroke
 crossed the whole page or laid a mark sixty pixels tall. So a plate's GPU
 cost scales with the *number of strokes on it*, and the stroke count is not
