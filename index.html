@@ -13,19 +13,48 @@
   <body>
     <header>
       <h1>brushstudio</h1>
-      <label>brush <select id="brush"></select></label>
-      <button id="clear">Clear</button>
-      <button id="save">Save PNG</button>
-      <label class="check"><input type="checkbox" id="dark" /> dark ground</label>
-      <span id="status"></span>
+      <details id="menu" class="pop">
+        <summary aria-label="menu" title="menu">&#9776;</summary>
+        <div class="sheet">
+          <button id="clear">Clear canvas</button>
+          <button id="save">Save PNG</button>
+          <label class="check"><input type="checkbox" id="erase" /> erase</label>
+          <label class="check"><input type="checkbox" id="dark" /> dark ground</label>
+        </div>
+      </details>
     </header>
     <main>
       <canvas id="canvas"></canvas>
+      <p id="status"></p>
       <aside>
-        <p id="notes"></p>
+        <details id="library" class="pop">
+          <summary>
+            <span id="brushname">brush</span>
+            <span id="count"></span>
+          </summary>
+          <div class="sheet">
+            <input
+              id="search"
+              type="search"
+              placeholder="filter brushes"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <ul id="brushes"></ul>
+          </div>
+        </details>
+        <nav id="rail"></nav>
         <div id="controls"></div>
-        <button id="copy">Copy settings patch</button>
-        <pre id="patch"></pre>
+        <pre id="patch" hidden></pre>
+        <footer id="bar">
+          <p id="hint"></p>
+          <div class="acts">
+            <span id="changes"></span>
+            <button id="revert" title="put every value back the way the document had it">revert</button>
+            <button id="showpatch" title="the settings patch this brush would be saved as">patch</button>
+            <button id="copy" title="copy the patch, ready to paste into the brush document">copy</button>
+          </div>
+        </footer>
       </aside>
     </main>
     <script type="module" src="/web/main.ts"></script>

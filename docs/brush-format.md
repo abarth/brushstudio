@@ -63,7 +63,8 @@ Sources:
 
 Paths are relative to the document. Everything a document references is
 embedded when it is exported, so the resulting `.abr` stands alone in
-Photoshop.
+Photoshop. The try-out app lists a document's own bitmaps under these names,
+above the engine's built-ins, and writes a picked one back as `@name`.
 
 ## Packs
 

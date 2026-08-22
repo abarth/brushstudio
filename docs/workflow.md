@@ -109,6 +109,25 @@ The try-out app's **Copy settings patch** button emits exactly the JSON a
 brush document takes, so a reviewer's fiddling comes back as a diff instead
 of a description.
 
+Its tip, dual brush and texture slots each show the bitmap they hold next to
+the picker that swaps it, so trying `fiber-drag` against `wisp-filament` is a
+click rather than a round trip — and a bitmap the document declared comes
+back in the patch under the `@name` the document gave it.
+
+Nothing in the engine is out of the app's reach: every jitter's Control, the
+fade length behind it, both texture blend modes, the stroke's own blend mode
+and the two colours Color Dynamics works between are all on the panel. A
+hunch about a brush can be tried under the hand before it is written down,
+which is the whole point of the step.
+
+Each section carries its own ratio from `docs/parameters.md`, recomputed as
+you drag: the stroke section shows `K = flow ÷ spacing` with the band it
+falls in, scattering shows `ρ = scatter ÷ spacing` and says so when it is
+under 3, and the dual brush says outright when its spacing has passed the
+point where the mask leaves holes. The numbers a reviewer would otherwise
+have to be told are on screen while they paint. A value moved off what the
+document had turns amber, and a double-click on its name puts it back.
+
 ## 7. Revise
 
 Change **one or two** parameters per iteration and re-measure. The

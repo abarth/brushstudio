@@ -55,9 +55,24 @@ the harness and which belong to the human. In short: the harness settles
 whether a brush *works*; the human settles whether it is *good*.
 
 For the second, there is a try-out app — `npm run dev` — where a reviewer
-paints with the brush by hand, moves the sliders, and hits **Copy settings
-patch**. Their fiddling comes back as JSON that drops straight into the
-brush document, instead of a description that has to be re-guessed.
+paints with the brush by hand, moves the sliders, and hits **copy**. Their
+fiddling comes back as JSON that drops straight into the brush document,
+instead of a description that has to be re-guessed.
+
+Its panel reaches every field the engine has — `npm test` fails if one of
+them falls off — which is more than fits on a screen, so it is built around
+four things rather than a longer list:
+
+| | |
+| --- | --- |
+| the rail | every section at once: which are on, which you have moved |
+| the readout | each section's governing ratio — `K = flow ÷ spacing`, `ρ = scatter ÷ spacing` — recomputed while you drag |
+| the number | drag it for fine, click and type for exact; the track is for seeing where a value sits, not for landing on one |
+| the dot | a value you moved off what the document had, and a double-click on its name to put it back |
+
+The tip, dual brush and texture slots show the bitmap they hold beside the
+picker that swaps it, and a section that is switched off shows nothing but
+its switch.
 
 ## Commands
 
