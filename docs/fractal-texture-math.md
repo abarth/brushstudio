@@ -320,7 +320,26 @@ each keyed by `field.kind`:
 * `veins` (marble): ridges `exp(−(g/w)²)` on the zero contours of
   band-passed Gaussian octaves, each modulated by a slow field so veins wax
   and wane (an unmodulated ridge is a plateau, and sparse cuts shatter it
-  into chips), all domain-warped for flow.
+  into chips), all domain-warped for flow. Fat widths turn the same
+  generator into smoke/agate washes.
+* `faults` (slate, shards, geological patchwork): the planar faulting
+  method — a sum of random half-plane steps. At low counts the fault lines
+  survive as straight facet edges and level sets are polygonal; at high
+  counts it converges toward a smooth fractal field.
+* `banded` (wood rings, onyx, damascus): the Perlin-marble construction
+  `cos(carrier + turbulence)` — a striped or ringed carrier phase-modulated
+  by a field with this spec's spectrum. The carrier alone is a spectral
+  LINE at the band frequency; modulation depth `warp` (rms, in cycles)
+  FM-spreads it — by `warp ≈ 0.5` the line is a broadband ridge, and past
+  `≈ 1.5` even the banding's *look* dissolves into swirl. The audit is the
+  arbiter, as ever: this is the one generator that starts from a comb and
+  earns its way out.
+
+Two cross-cutting knobs: `spectrum.stretchX` squeezes the passband in fx,
+elongating structure along x for brushed metal, drag marks and striated
+stone (the §7 isotropy check is then *expected* to flag the axis — by
+design); and a cellular scale's `f1Weight` adds a per-cell dome — hammered
+metal, orange peel, pebbled leather grain.
 
 What is scale-structured stays a spectrum decision; what is
 phase-structured becomes a generator decision; coverage, nesting,

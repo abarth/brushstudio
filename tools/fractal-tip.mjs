@@ -130,10 +130,14 @@ function scatterTransfer(fPerPx) {
  */
 function buildAmp(correction) {
   const amp = new Float64Array(N * N);
+  // stretchX > 1 squeezes the passband in fx, elongating structure along x:
+  // the anisotropy of brushed metal, drag marks, striated stone. The tip
+  // rotates at paint time (or the pattern is laid once), so one axis serves.
+  const stretch = sp.stretchX ?? 1;
   for (let y = 0; y < N; y++) {
     const fy = binFreq(y, N);
     for (let x = 0; x < N; x++) {
-      const f = Math.hypot(binFreq(x, N), fy);
+      const f = Math.hypot(binFreq(x, N) * stretch, fy);
       const k = f * N;
       const p = targetPower(k);
       if (p <= 0) continue;
@@ -222,6 +226,9 @@ function cellularField(f) {
       for (let sc = 0; sc < scales.length; sc++) {
         const hit = worley(scales[sc].w, u, v);
         s += (scales[sc].weight * (hit.v - 0.5)) / 0.2887;
+        // dimple term: deeper toward cell edges, a dome per cell — hammered
+        // metal, orange peel, per-pebble shading on leather
+        if (scales[sc].f1Weight) s -= scales[sc].f1Weight * hit.f1;
         if (sc === wallIdx && f.wallDepth) {
           s -= f.wallDepth * smoothstep(f.wallWidth, 0, hit.f2 - hit.f1);
         }
@@ -376,6 +383,88 @@ function veinsField(f) {
         v += o.weight * m * Math.exp(-((g / o.width) ** 2));
       }
       out[i] = v;
+    }
+  }
+  let mean = 0;
+  for (const v of out) mean += v;
+  mean /= out.length;
+  let vari = 0;
+  for (let i = 0; i < out.length; i++) {
+    out[i] -= mean;
+    vari += out[i] * out[i];
+  }
+  const inv = 1 / Math.sqrt(vari / out.length || 1);
+  for (let i = 0; i < out.length; i++) out[i] *= inv;
+  return out;
+}
+
+/**
+ * Faulting field (field.kind: "faults"): the planar faulting method — sum
+ * of random half-plane steps (each fault line raises one side, lowers the
+ * other). At low counts the fault lines survive as straight facet edges:
+ * level sets are polygonal territories — slate, flagstone, shattered
+ * glass. At high counts it converges toward a smooth fractal field. An
+ * optional fbm mix erodes the facets' flatness.
+ */
+function faultsField(f) {
+  const rng = mulberry32(spec.seed + 307);
+  const out = new Float64Array(N * N);
+  const M = f.count ?? 200;
+  for (let m = 0; m < M; m++) {
+    const th = rng() * Math.PI * 2;
+    const nx = Math.cos(th);
+    const ny = Math.sin(th);
+    const d = nx * (rng() * N) + ny * (rng() * N);
+    const a = 1 + (f.ampJitter ?? 0.5) * (rng() * 2 - 1);
+    for (let y = 0; y < N; y++) {
+      const rowDot = ny * y - d;
+      for (let x = 0; x < N; x++) {
+        out[y * N + x] += nx * x + rowDot > 0 ? a : -a;
+      }
+    }
+  }
+  if (f.fbmWeight) {
+    const fbm = synthField(buildAmp(null), makePhases(spec.seed + 7));
+    let vari = 0;
+    for (const v of out) vari += v * v;
+    const sd = Math.sqrt(vari / out.length) || 1;
+    for (let i = 0; i < out.length; i++) out[i] = out[i] / sd + f.fbmWeight * fbm[i];
+  }
+  let mean = 0;
+  for (const v of out) mean += v;
+  mean /= out.length;
+  let vari = 0;
+  for (let i = 0; i < out.length; i++) {
+    out[i] -= mean;
+    vari += out[i] * out[i];
+  }
+  const inv = 1 / Math.sqrt(vari / out.length || 1);
+  for (let i = 0; i < out.length; i++) out[i] *= inv;
+  return out;
+}
+
+/**
+ * Banded field (field.kind: "banded"): the Perlin-marble construction,
+ * cos(carrier + turbulence) — a striped or ringed carrier phase-modulated
+ * by a broadband field whose spectrum is this spec's spectrum block. The
+ * carrier alone would be a spectral LINE at `bands` c/dia; modulation
+ * depth `warp` (in cycles, rms) FM-spreads that line into a broadband
+ * ridge — push it past ~1.5 and the audit finds no spike. Linear bands
+ * with stretchX are wood figure and damascus; rings are growth rings.
+ */
+function bandedField(f) {
+  const W = synthField(buildAmp(null), makePhases(spec.seed + 7));
+  const cx = (f.centerX ?? 0.5) * N;
+  const cy = (f.centerY ?? 0.5) * N;
+  const oval = f.ovality ?? 1;
+  const gamma = f.gamma ?? 1;
+  const out = new Float64Array(N * N);
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const i = y * N + x;
+      const u = f.rings ? Math.hypot(x - cx, (y - cy) * oval) / N : x / N;
+      const c = Math.cos(2 * Math.PI * (f.bands * u + f.warp * W[i]));
+      out[i] = gamma === 1 ? c : Math.sign(c) * Math.pow(Math.abs(c), gamma);
     }
   }
   let mean = 0;
@@ -678,6 +767,8 @@ const baseField =
   FIELD_KIND === 'cellular' ? cellularField(spec.field)
   : FIELD_KIND === 'pores' ? poresField(spec.field)
   : FIELD_KIND === 'veins' ? veinsField(spec.field)
+  : FIELD_KIND === 'faults' ? faultsField(spec.field)
+  : FIELD_KIND === 'banded' ? bandedField(spec.field)
   : synthField(buildAmp(null));
 
 if (spec.output === 'pattern') {
@@ -695,6 +786,30 @@ if (spec.output === 'pattern') {
   const out = join(outDir, `${spec.name}.png`);
   writeFileSync(out, encodeGrayPng(data, N, N));
   console.log(`  ${out}  (tileable pattern, equalized)  in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+  process.exit(0);
+}
+
+// --swatch a,b,c: exploration mode — write the continuous field plus flat
+// unvignetted threshold cuts at the given coverages, and stop. For looking
+// at candidate textures side by side before any of them earns a family.
+const swatchIdx = argv.indexOf('--swatch');
+if (swatchIdx >= 0) {
+  const covs = argv[swatchIdx + 1].split(',').map((s) => Number(s.trim()));
+  const order = Array.from(baseField.keys()).sort((i, j) => baseField[i] - baseField[j]);
+  const eq = new Uint8Array(N * N);
+  for (let r = 0; r < order.length; r++) eq[order[r]] = Math.round((r / (order.length - 1)) * 255);
+  writeFileSync(join(outDir, `${spec.name}.field.png`), encodeGrayPng(eq, N, N));
+  const sortedAll = Float64Array.from(baseField).sort();
+  for (const pct of covs) {
+    const t = sortedAll[clamp(Math.floor((1 - pct / 100) * sortedAll.length), 0, sortedAll.length - 1)];
+    const bin = new Float64Array(N * N);
+    for (let i = 0; i < bin.length; i++) bin[i] = baseField[i] > t ? 1 : 0;
+    const soft = tentBlur(bin, 2);
+    const bytes = new Uint8Array(N * N);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.round(clamp(soft[i], 0, 1) * 255);
+    writeFileSync(join(outDir, `${spec.name}.t${pct}.png`), encodeGrayPng(bytes, N, N));
+  }
+  console.log(`swatches for ${spec.name}: field + t${covs.join(',t')} in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
   process.exit(0);
 }
 

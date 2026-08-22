@@ -1,4 +1,4 @@
-import { deflateSync } from 'node:zlib';
+import { deflateSync, inflateSync } from 'node:zlib';
 
 /**
  * Signal-processing primitives for texture-tip synthesis and spectral
@@ -259,6 +259,37 @@ function chunk(type, data) {
   data.copy(out, 8);
   out.writeUInt32BE(crc32(out.subarray(4, 8 + data.length)), 8 + data.length);
   return out;
+}
+
+/**
+ * Reads back exactly what encodeGrayPng writes (8-bit gray, filter 0) —
+ * for tools that composite their own outputs, not a general PNG reader.
+ */
+export function decodeGrayPng(buf) {
+  let off = 8;
+  let width = 0;
+  let height = 0;
+  const idat = [];
+  while (off < buf.length) {
+    const len = buf.readUInt32BE(off);
+    const type = buf.toString('ascii', off + 4, off + 8);
+    const body = buf.subarray(off + 8, off + 8 + len);
+    if (type === 'IHDR') {
+      width = body.readUInt32BE(0);
+      height = body.readUInt32BE(4);
+      if (body[8] !== 8 || body[9] !== 0) throw new Error('decodeGrayPng: not 8-bit grayscale');
+    } else if (type === 'IDAT') {
+      idat.push(body);
+    }
+    off += 12 + len;
+  }
+  const raw = inflateSync(Buffer.concat(idat));
+  const data = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) {
+    if (raw[y * (width + 1)] !== 0) throw new Error('decodeGrayPng: unexpected row filter');
+    data.set(raw.subarray(y * (width + 1) + 1, (y + 1) * (width + 1)), y * width);
+  }
+  return { width, height, data };
 }
 
 /** 8-bit grayscale, non-interlaced — what src/node/png.ts reads back. */
