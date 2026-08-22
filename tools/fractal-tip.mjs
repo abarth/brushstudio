@@ -242,6 +242,70 @@ function cellularField(f) {
   return out;
 }
 
+/**
+ * Pore/foam wallness field (field.kind: "pores"): bubbles at Worley feature
+ * points over several scales, radii heavy-tailed per cell, and the field is
+ * how far a point sits OUTSIDE the deepest bubble claiming it. Thresholds
+ * of this field are foam: high coverage = thick Plateau borders around
+ * small round holes, low coverage = a thin connected lace along the wall
+ * medials — the walls between bubbles are connected by construction, which
+ * is the thin-network structure a Gaussian level set cannot make.
+ */
+function poresField(f) {
+  const rng = mulberry32(spec.seed + 211);
+  const scales = f.scales.map((s) => ({ ...s, w: makeWorley(rng, s.cells) }));
+  const fbm = f.fbmWeight ? synthField(buildAmp(null), makePhases(spec.seed + 7)) : null;
+  let wxF = null;
+  let wyF = null;
+  if (f.warp) {
+    const warpAmp = new Float64Array(N * N);
+    for (let y = 0; y < N; y++) {
+      const fy = binFreq(y, N);
+      for (let x = 0; x < N; x++) {
+        const k = Math.hypot(binFreq(x, N), fy) * N;
+        if (k > 0 && k <= 5) warpAmp[y * N + x] = 1 / (1 + k * k);
+      }
+    }
+    wxF = synthField(warpAmp, makePhases(spec.seed + 13));
+    wyF = synthField(warpAmp, makePhases(spec.seed + 17));
+  }
+  const out = new Float64Array(N * N);
+  for (let y = 0; y < N; y++) {
+    const v0 = y / N;
+    for (let x = 0; x < N; x++) {
+      const i = y * N + x;
+      const u = x / N + (wxF ? f.warp * wxF[i] : 0);
+      const v = v0 + (wyF ? f.warp * wyF[i] : 0);
+      // Growth time: how much every bubble must inflate before this point
+      // is swallowed — min over bubbles of (f1/r − 1). Thresholding this is
+      // UNIFORM bubble growth, so walls thin everywhere and the lace stays
+      // connected at low coverage. (Absolute wall distance was tried first
+      // and fails: its high quantiles retreat to junction pockets, leaving
+      // isolated dots instead of a network.)
+      let firstSwallow = 1e9;
+      for (const s of scales) {
+        const hit = worley(s.w, u, v);
+        // per-cell radius in cell units: rBase ± rVar, value^gamma heavy tail
+        const r = s.rBase + s.rVar * Math.pow(hit.v, s.gamma ?? 2);
+        const g = (hit.f1 / r - 1) / (s.weight ?? 1);
+        if (g < firstSwallow) firstSwallow = g;
+      }
+      out[i] = firstSwallow + (fbm ? f.fbmWeight * fbm[i] : 0);
+    }
+  }
+  let mean = 0;
+  for (const v of out) mean += v;
+  mean /= out.length;
+  let vari = 0;
+  for (let i = 0; i < out.length; i++) {
+    out[i] -= mean;
+    vari += out[i] * out[i];
+  }
+  const inv = 1 / Math.sqrt(vari / out.length || 1);
+  for (let i = 0; i < out.length; i++) out[i] *= inv;
+  return out;
+}
+
 /** Values inside the vignette plateau (r ≤ 0.6), sorted — the quantile table. */
 function plateauSorted(field) {
   const c = (N - 1) / 2;
@@ -525,7 +589,10 @@ console.log(
     COMPONENTS.map((b) => `β=${b.beta}@knee ${b.kneeCyclesPerDia}${b.weight ? ` w${b.weight}` : ''}`).join(' + '),
 );
 const FIELD_KIND = spec.field?.kind ?? 'spectral';
-const baseField = FIELD_KIND === 'cellular' ? cellularField(spec.field) : synthField(buildAmp(null));
+const baseField =
+  FIELD_KIND === 'cellular' ? cellularField(spec.field)
+  : FIELD_KIND === 'pores' ? poresField(spec.field)
+  : synthField(buildAmp(null));
 
 if (spec.output === 'pattern') {
   // A texture-channel pattern: tileable by FFT construction, no vignette,
