@@ -309,6 +309,32 @@ export async function runCases(BS, backend = 'cpu') {
     assert(written.issues.length === 0, written.issues.join('; '));
   });
 
+  await test('a preset saved for another tool is read, not refused', async () => {
+    // Saving a preset with tool settings binds it to the tool in use, and the
+    // class of toolOptions is which tool that was: a real pack carries
+    // smudge, eraser and pencil presets beside the brushes. They are ordinary
+    // presets and have to read as such — only the mark they make differs.
+    const written = await BS.exportAbr([doc({ flow: 0.4 })], {});
+    const bytes = typeof written.abr === 'string'
+      ? Uint8Array.from(atob(written.abr), (c) => c.charCodeAt(0))
+      : new Uint8Array(written.abr);
+    const n = [...'PbTl'].map((c) => c.charCodeAt(0));
+    let at = -1;
+    for (let i = 0; i + 4 <= bytes.length && at < 0; i++) {
+      if (n.every((b, k) => bytes[i + k] === b)) at = i;
+    }
+    assert(at >= 0, 'the toolOptions class was not written');
+    bytes.set([...'SmTl'].map((c) => c.charCodeAt(0)), at); // same length, no reflow
+
+    const report = BS.inspectAbr(bytes, 'smudge.abr');
+    assert(
+      !report.issues.some((i) => i.kind === 'class'),
+      `a tool class was refused: ${JSON.stringify(report.issues)}`,
+    );
+    assert(report.brushes[0].tool === 'SmTl', `tool came back ${report.brushes[0].tool}`);
+    assert(report.brushes[0].patch.flow === 0.4, 'the options bar was not read');
+  });
+
   await test('a count survives as the double Photoshop stores it as', async () => {
     // Count looks like an integer and is not one: a real pack stores it as a
     // 'doub', and reading it as a long left every dual brush we imported

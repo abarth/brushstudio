@@ -26,6 +26,13 @@ export interface AbrBrush {
   name: string;
   /** the descriptor exactly as parsed, for comparing one file against another */
   raw?: Descriptor;
+  /**
+   * The tool this preset was saved for, from the class of its toolOptions:
+   * `PbTl` paintbrush, `PcTl` pencil, `ErTl` eraser, `SmTl` smudge. Saving a
+   * preset with tool settings binds it to the tool in use at the time, and a
+   * smudge preset painted as a brush is a different mark entirely.
+   */
+  tool?: string;
   /** id of the sampled tip in `tips`, or null for a computed round brush */
   tipId: string | null;
   /** id of the texture pattern in `patterns`, when the brush uses Texture */
@@ -672,12 +679,31 @@ function mapTip(f: Fields | undefined): TipInfo {
  * Texture panel's Protect Texture, and the smoothing booleans are the CC2018
  * options-bar refinements that sit beside the Smoothing amount.
  */
-const UNMODELLED_PRESET_KEYS = ['wtVr', 'mxVr', 'protectTexture'];
+const UNMODELLED_PRESET_KEYS = [
+  'wtVr', 'mxVr', 'protectTexture',
+  // a stale copy of the tip's own spacing; the one inside Brsh is the panel's
+  'Spcn',
+];
 
+/**
+ * toolOptions carries the *tool's* dynamics as well as the options bar, and
+ * which ones depends on the tool: the brush has size, opacity and flow, the
+ * pencil has no flow, the smudge tool has strength instead of opacity. The
+ * rest are that tool's own switches — auto-erase on the pencil, magic eraser,
+ * the smudge finger-painting pair — and the CC2018 smoothing refinements.
+ */
 const UNMODELLED_TOOL_KEYS = [
+  'szVr', 'opVr', 'prVr', 'clVr',
   'smoothingRadiusMode', 'smoothingCatchup', 'smoothingCatchupAtEnd',
   'smoothingZoomCompensation', 'pressureSmoothing',
+  'PncA', 'MgcE', 'ErsB', 'Prs', 'SmdF', 'SmdS',
 ];
+
+/**
+ * Classes a toolOptions descriptor is seen at, one per tool. Anything else is
+ * reported rather than assumed, so a tool we have not met announces itself.
+ */
+const TOOL_CLASSES = ['PbTl', 'PcTl', 'ErTl', 'SmTl'];
 
 const PRESET_KEYS = [
   'Nm', 'Brsh', 'useTipDynamics', 'flipX', 'flipY', 'brushProjection',
@@ -698,6 +724,12 @@ const TOOL_KEYS = [
   'usePressureOverridesSize', 'usePressureOverridesOpacity', 'useLegacy',
   ...UNMODELLED_TOOL_KEYS,
 ];
+
+/** The class id of a nested descriptor, when the key holds one. */
+function descOf(d: Descriptor, key: string): Descriptor | undefined {
+  const v = d.fields[key];
+  return v?.t === 'desc' ? v.v : undefined;
+}
 
 /** Maps one brushPreset descriptor to a name/tip/pattern/settings record. */
 function mapBrushDescriptor(d: Descriptor, index: number, issues: AbrIssue[]): AbrBrush {
@@ -857,7 +889,8 @@ function mapBrushDescriptor(d: Descriptor, index: number, issues: AbrIssue[]): A
   // Opacity, Flow and Smoothing are whole integers — Photoshop's own
   // scripting API reads them back with getInteger — so a unit float here is
   // the wrong type, not a more precise one.
-  const tool = f.obj('toolOptions', 'PbTl');
+  const tool = f.obj('toolOptions', ...TOOL_CLASSES);
+  const toolClass = descOf(d, 'toolOptions')?.classId;
   if (tool) {
     tool.unknown(TOOL_KEYS);
     const opct = tool.int('Opct');
@@ -888,6 +921,7 @@ function mapBrushDescriptor(d: Descriptor, index: number, issues: AbrIssue[]): A
   return {
     name: f.text('Nm') ?? '',
     raw: d,
+    tool: toolClass,
     tipId: tip.tipId,
     texturePatternId,
     settings,

@@ -175,6 +175,9 @@ export function inspectAbr(abr: string | Uint8Array | ArrayBuffer, path: string)
       return {
         index: i,
         name: b.name,
+        // which tool the preset was saved for; a smudge or eraser preset
+        // paints a different mark than the plate will show
+        tool: b.tool,
         tipId: b.tipId,
         texturePatternId: b.texturePatternId,
         summary: describeBrush(settings),

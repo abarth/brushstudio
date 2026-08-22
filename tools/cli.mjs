@@ -294,8 +294,12 @@ async function main() {
         `${report.brushes.length} brush(es), ${report.tips.length} tip(s), ` +
           `${report.patterns.length} pattern(s)\n`,
       );
+      const TOOLS = { PbTl: 'brush', PcTl: 'pencil', ErTl: 'eraser', SmTl: 'smudge' };
       for (const b of report.brushes) {
-        console.log(`  [${b.index}] ${b.name}`);
+        // a preset saved with tool settings is bound to the tool in use at
+        // the time, and the plate paints every one of them as a brush
+        const tool = b.tool && b.tool !== 'PbTl' ? `  (${TOOLS[b.tool] ?? b.tool} preset)` : '';
+        console.log(`  [${b.index}] ${b.name}${tool}`);
         console.log(`      ${b.summary}`);
       }
       console.log('\ntips');

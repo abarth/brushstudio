@@ -69,10 +69,10 @@ API, which reads and writes these same descriptors through `getInteger`,
 `getUnitDouble` and friends, and a key at the wrong type is a key Photoshop
 refuses rather than a near miss.
 
-Everything here has been read back out of a pack Photoshop itself wrote,
-with the reader in strict mode reporting anything that disagreed — which is
-how `Cnt ` was caught being a `doub`. The rows still marked *inferred* are
-the ones that pack did not happen to exercise.
+Everything here has been read back out of packs Photoshop itself wrote —
+49 brushes across two of them, with the reader in strict mode reporting
+anything that disagreed, which is how `Cnt ` was caught being a `doub`. The
+rows still marked *inferred* are the ones no pack has exercised yet.
 
 One rule governs the whole table: **the Brush Settings panel stores
 percentages as `UntF` `#Prc` unit floats, and the options bar stores whole
@@ -100,19 +100,34 @@ rejects a tip at any other class with "unknown brush type".
 | `szVr` `angleDynamics` `roundnessDynamics` `scatterDynamics` `countDynamics` `opVr` `prVr` `clVr` `textureDepthDynamics` | `Objc` classed `brVr` | one dynamics object each |
 | `bVTy` `fStp` | `long` | inside `brVr`: control source, fade steps |
 | `jitter` `Mnm ` | `UntF #Prc` | inside `brVr`: the jitter and its minimum |
-| `Cnt ` | `doub` | count — in `dualBrush` and in Scattering; it looks like an integer and is not one |
+| `Cnt ` | `doub` | count — in `dualBrush` and in Scattering alike; it looks like an integer and is not one |
 | `textureScale` `textureDepth` `minimumDepth` | `UntF #Prc` | Texture amounts |
-| `textureBrightness` `textureContrast` | `long` | the Texture panel's integer sliders (-150..150, -50..100) — *inferred* |
+| `textureBrightness` `textureContrast` | `long` | the Texture panel's integer sliders (-150..150, -50..100) |
 | `textureBlendMode` `BlnM` `Md  ` | `enum` `BlnM` | blend modes |
 | `H   ` `Strt` `Brgh` `purity` | `UntF #Prc` | Color Dynamics |
 | `Wtdg` `Nose` `Rpt ` | `bool` | wet edges, noise, airbrush |
 
-**The options bar** — `toolOptions`, classed `PbTl`. There is no *Include
-Tool Settings* flag: a preset saved with tool settings carries this
-descriptor and one saved without simply has none, which is why such a brush
-imports painting at whatever the tool was already set to. (Verified: one
-brush in a real pack has no `toolOptions` at all, and every other brush in
-the same pack has one.)
+**The options bar** — `toolOptions`. There is no *Include Tool Settings*
+flag: a preset saved with tool settings carries this descriptor and one saved
+without simply has none, which is why such a brush imports painting at
+whatever the tool was already set to. (Verified: one brush in a real pack has
+no `toolOptions` at all, and every other brush in the same pack has one.)
+
+Its **class is the tool the preset was bound to** — `PbTl` paintbrush, `PcTl`
+pencil, `ErTl` eraser, `SmTl` smudge — because saving with tool settings
+binds the preset to the tool in use at the time. `inspect` names the tool
+when it is not the brush, which is worth knowing before reading a plate: this
+engine paints a smudge preset as though it were a brush.
+
+The descriptor also carries the *tool's own* dynamics — `szVr`, `opVr`,
+`prVr`, `clVr` — and which of them appear depends on the tool: the pencil has
+no flow, the smudge tool has strength rather than opacity. None are read
+here; the Brush Settings panel's copies are what the engine paints from.
+
+What a pack puts in this descriptor otherwise varies by Photoshop version:
+of the two read so far, one carries the smoothing keys and no tool dynamics,
+the other carries the tool dynamics and no smoothing keys. Only `flow`,
+`Opct` and `Md  ` appear in both.
 
 | key | type | is | evidence |
 | --- | --- | --- | --- |
@@ -126,14 +141,11 @@ the same pack has one.)
 
 **Still unsettled**, and marked here so nobody re-derives it from scratch:
 
-* `smoothingValue`'s 0..255 scale rests on one Adobe forum recipe. The pack
-  read so far has Smoothing at 0 on every brush that carries it, which tells
-  us nothing about the scale. `Smoo` is written and read first, so this only
-  matters if Photoshop prefers the other key.
-* `textureBrightness` and `textureContrast` as `long` is inferred from the
-  sliders being integers in the UI; no pack read so far sets either.
-* The Scattering panel's `Cnt ` is assumed to match `dualBrush`'s, which is
-  verified. No pack read so far has Scattering enabled.
+* `smoothingValue`'s 0..255 scale rests on one Adobe forum recipe. Of the two
+  packs read so far, one has Smoothing at 0 on every brush and the other has
+  no smoothing keys at all, so neither says anything about the scale. `Smoo`
+  is written and read first, so this only matters if Photoshop prefers the
+  other key.
 
 ## What a pack can tell you
 
@@ -168,8 +180,13 @@ have no representation in the file format:
   fixed sampled tip at the resolution it was generated at.
 * **Photoshop-only features** the engine does not model — bristle tips,
   erodible tips, airbrush cones, brush poses, the Mixer Brush's wet and mix
-  dynamics (`wtVr`, `mxVr`), Protect Texture, and the CC2018 smoothing
-  refinements beside the Smoothing amount — are neither read nor written.
+  dynamics (`wtVr`, `mxVr`), Protect Texture, the tool's own dynamics inside
+  `toolOptions`, and the CC2018 smoothing refinements beside the Smoothing
+  amount — are neither read nor written.
+* **Presets for another tool** — a pack often carries smudge, eraser and
+  pencil presets beside its brushes. They read fine and `inspect` names them,
+  but every plate here paints them as a brush, which for a smudge preset is
+  not the mark Photoshop would make.
   A pack using them will import with those brushes reduced to what is
   representable, which `inspect` will show plainly.
 
