@@ -184,6 +184,56 @@ export function radialSpectrum(field, n, bins = 48) {
   return { freq, power: mag };
 }
 
+/**
+ * Periodic cellular (Worley) noise: one jittered feature point per cell,
+ * returning the nearest two distances and the nearest cell's random value —
+ * the same construction as src/brush/organicTips.ts, here for the field
+ * generators that need angular structure a Gaussian field cannot make.
+ */
+export function makeWorley(rng, cells) {
+  const jitter = new Float64Array(cells * cells * 2);
+  const value = new Float64Array(cells * cells);
+  for (let i = 0; i < cells * cells; i++) {
+    jitter[i * 2] = rng();
+    jitter[i * 2 + 1] = rng();
+    value[i] = rng();
+  }
+  return { cells, jitter, value };
+}
+
+export function worley(w, u, v) {
+  const n = w.cells;
+  const px = u * n;
+  const py = v * n;
+  const ix = Math.floor(px);
+  const iy = Math.floor(py);
+  let f1 = 1e9;
+  let f2 = 1e9;
+  let nearest = 0;
+  for (let dj = -1; dj <= 1; dj++) {
+    for (let di = -1; di <= 1; di++) {
+      const cx = ix + di;
+      const cy = iy + dj;
+      let wx = cx % n;
+      let wy = cy % n;
+      if (wx < 0) wx += n;
+      if (wy < 0) wy += n;
+      const k = wy * n + wx;
+      const fx = cx + w.jitter[k * 2];
+      const fy = cy + w.jitter[k * 2 + 1];
+      const d = Math.sqrt((px - fx) * (px - fx) + (py - fy) * (py - fy));
+      if (d < f1) {
+        f2 = f1;
+        f1 = d;
+        nearest = k;
+      } else if (d < f2) {
+        f2 = d;
+      }
+    }
+  }
+  return { f1, f2, v: w.value[nearest] };
+}
+
 // --- grayscale PNG -----------------------------------------------------------
 
 const CRC_TABLE = (() => {

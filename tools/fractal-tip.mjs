@@ -25,8 +25,10 @@ import {
   fft2d,
   gaussians,
   makeLambda,
+  makeWorley,
   mulberry32,
   radialSpectrum,
+  worley,
 } from './lib/dsp.mjs';
 import { loadCpuHarness } from './lib/harness.mjs';
 
@@ -145,9 +147,8 @@ function buildAmp(correction) {
 
 // --- synthesis ---------------------------------------------------------------
 
-/** One fixed set of spectral phases: the whole family is one field. */
-const phases = (() => {
-  const g = gaussians(mulberry32(spec.seed));
+function makePhases(seed) {
+  const g = gaussians(mulberry32(seed));
   const re = new Float64Array(N * N);
   const im = new Float64Array(N * N);
   for (let i = 0; i < N * N; i++) {
@@ -155,15 +156,18 @@ const phases = (() => {
     im[i] = g();
   }
   return { re, im };
-})();
+}
+
+/** One fixed set of spectral phases: the whole family is one field. */
+const phases = makePhases(spec.seed);
 
 /** Gaussian field with spectrum amp², phases fixed; normalized to μ0 σ1. */
-function synthField(amp) {
+function synthField(amp, ph = phases) {
   const re = new Float64Array(N * N);
   const im = new Float64Array(N * N);
   for (let i = 0; i < amp.length; i++) {
-    re[i] = phases.re[i] * amp[i];
-    im[i] = phases.im[i] * amp[i];
+    re[i] = ph.re[i] * amp[i];
+    im[i] = ph.im[i] * amp[i];
   }
   fft2d(re, im, N, true);
   let mean = 0;
@@ -177,6 +181,65 @@ function synthField(amp) {
   const inv = 1 / Math.sqrt(vari / re.length || 1);
   for (let i = 0; i < re.length; i++) re[i] *= inv;
   return re;
+}
+
+/**
+ * Cellular survival field (field.kind: "cellular"): a weighted sum of
+ * per-cell random values over several Worley scales, plus an fbm term, minus
+ * a dip along the coarsest scale's cell walls. Thresholding drops whole
+ * cells — angular flakes with mixed sizes — the fbm clusters the damage,
+ * and the wall dip keeps hairline cracks below threshold even at high
+ * coverage. Gaussian level sets cannot make any of that (docs §4: phase);
+ * this generator exists for the fracture/fragment family of materials.
+ */
+function cellularField(f) {
+  const rng = mulberry32(spec.seed + 101);
+  const scales = f.scales.map((s) => ({ w: makeWorley(rng, s.cells), weight: s.weight }));
+  const fbm = synthField(buildAmp(null), makePhases(spec.seed + 7));
+  let wx = null;
+  let wy = null;
+  if (f.warp) {
+    const warpAmp = new Float64Array(N * N);
+    for (let y = 0; y < N; y++) {
+      const fy = binFreq(y, N);
+      for (let x = 0; x < N; x++) {
+        const k = Math.hypot(binFreq(x, N), fy) * N;
+        if (k > 0 && k <= 5) warpAmp[y * N + x] = 1 / (1 + k * k);
+      }
+    }
+    wx = synthField(warpAmp, makePhases(spec.seed + 13));
+    wy = synthField(warpAmp, makePhases(spec.seed + 17));
+  }
+  const wallIdx = f.wallScaleIndex ?? 0;
+  const out = new Float64Array(N * N);
+  for (let y = 0; y < N; y++) {
+    const v0 = y / N;
+    for (let x = 0; x < N; x++) {
+      const i = y * N + x;
+      const u = x / N + (wx ? f.warp * wx[i] : 0);
+      const v = v0 + (wy ? f.warp * wy[i] : 0);
+      let s = f.fbmWeight * fbm[i];
+      for (let sc = 0; sc < scales.length; sc++) {
+        const hit = worley(scales[sc].w, u, v);
+        s += (scales[sc].weight * (hit.v - 0.5)) / 0.2887;
+        if (sc === wallIdx && f.wallDepth) {
+          s -= f.wallDepth * smoothstep(f.wallWidth, 0, hit.f2 - hit.f1);
+        }
+      }
+      out[i] = s;
+    }
+  }
+  let mean = 0;
+  for (const v of out) mean += v;
+  mean /= out.length;
+  let vari = 0;
+  for (let i = 0; i < out.length; i++) {
+    out[i] -= mean;
+    vari += out[i] * out[i];
+  }
+  const inv = 1 / Math.sqrt(vari / out.length || 1);
+  for (let i = 0; i < out.length; i++) out[i] *= inv;
+  return out;
 }
 
 /** Values inside the vignette plateau (r ≤ 0.6), sorted — the quantile table. */
@@ -336,8 +399,8 @@ const INK_FLOOR = 8;
  *   fill, excluding the ragged edge zone. This is what the family's
  *   coverage labels grade, and what calibration targets.
  */
-async function probeCoverage(harness, tipId) {
-  const s = trainSettings(harness, tipId);
+async function probeCoverage(harness, tipId, level) {
+  const s = trainSettings(harness, tipId, level);
   const d = spec.train.size;
   const pad = Math.ceil(d * 2 + 40);
   const runLen = Math.ceil(Math.max(d * 12, 700));
@@ -420,8 +483,18 @@ async function probeCoverage(harness, tipId) {
  * finished stroke (docs/fractal-texture-math.md §9 — the mask multiplies
  * once, so its labyrinth survives however densely the primary accumulates).
  */
-function trainSettings(harness, tipId) {
-  const t = spec.train;
+function trainSettings(harness, tipId, level) {
+  // A level may override parts of the train (merged one key deep). The
+  // erosion family uses this: its 70–90% masks are near-solid, so they can
+  // afford a sparser mask train (no beading variance left to smooth), and
+  // need one — at the shared overlap their hairline cracks union shut.
+  const o = level?.train ?? {};
+  const t = {
+    ...spec.train,
+    ...o,
+    primary: { ...spec.train.primary, ...o.primary },
+    dual: { ...spec.train.dual, ...o.dual },
+  };
   return harness.makeBrush({
     tip: { shape: 'round', size: t.size, hardness: t.primary.hardness, spacing: t.primary.spacing },
     shape: {
@@ -451,8 +524,8 @@ console.log(
   `synthesizing ${spec.name}: ${N}px field, ` +
     COMPONENTS.map((b) => `β=${b.beta}@knee ${b.kneeCyclesPerDia}${b.weight ? ` w${b.weight}` : ''}`).join(' + '),
 );
-const baseAmp = buildAmp(null);
-const baseField = synthField(baseAmp);
+const FIELD_KIND = spec.field?.kind ?? 'spectral';
+const baseField = FIELD_KIND === 'cellular' ? cellularField(spec.field) : synthField(buildAmp(null));
 
 if (spec.output === 'pattern') {
   // A texture-channel pattern: tileable by FFT construction, no vignette,
@@ -487,7 +560,7 @@ for (const level of spec.levels) {
   // tail a Gaussian target lacks, so "correcting" the binary field toward
   // the Gaussian target deletes the pore band. The design surface is the
   // pre-threshold spectrum; the stroke audit measures what actually ships.
-  const corr = spec.spectralCorrection ? correctionCurve(baseField, baseSorted, level.q) : null;
+  const corr = spec.spectralCorrection && FIELD_KIND === 'spectral' ? correctionCurve(baseField, baseSorted, level.q) : null;
   const field = corr ? synthField(buildAmp(corr)) : baseField;
   const sorted = corr ? plateauSorted(field) : baseSorted;
 
@@ -498,7 +571,7 @@ for (const level of spec.levels) {
   if (CALIBRATE) {
     for (let iter = 0; iter < 5; iter++) {
       harness.registerTip(name, { size: N, data: bytes });
-      measured = await probeCoverage(harness, name);
+      measured = await probeCoverage(harness, name, level);
       if (Math.abs(measured.core - level.coverage) <= 0.012) break;
       // Poisson-model update (docs §4): C = 1 − e^(−n·q) ⇒ n from the
       // measurement, then q for the target — converges in 1–2 steps.
