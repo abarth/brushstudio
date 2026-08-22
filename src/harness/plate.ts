@@ -108,54 +108,92 @@ function layoutBlock(
   return { entry, size, reach, height, title, caption, titleH, rows };
 }
 
+/**
+ * Paints one brush's page and hands back its pixels.
+ *
+ * A surface per block, not one for the whole plate. The saving from a
+ * single surface is real on the CPU renderer and ruinous on the GPU one:
+ * baking a stroke into its layer is a fullscreen pass there, so widening
+ * the surface to the whole plate multiplies every stroke's commit by the
+ * number of brushes on it. Measured, that turned a four-brush plate from
+ * about half a minute into more than fifteen.
+ */
+async function paintBlock(
+  block: BlockLayout,
+  width: number,
+  strokes: TestStroke[],
+  options: PlateOptions,
+  firstSeed: number,
+): Promise<Uint8Array> {
+  const noteH = options.annotate ? NOTE_H : 0;
+  const backend =
+    typeof options.backend === 'string'
+      ? backendFactory(options.backend)
+      : options.backend ?? cpuBackend;
+  const surface = await Surface.create(width, block.height, backend);
+  const paper = options.paper ?? (options.dark ? PAPER_DARK : PAPER_LIGHT);
+  surface.fill([paper[0], paper[1], paper[2], 1]);
+
+  const fg = options.fg ?? (options.dark ? INK_DARK : INK_LIGHT);
+  const bg = options.bg ?? (options.dark ? INK_LIGHT : INK_DARK);
+  let seed = firstSeed;
+  strokes.forEach((stroke, i) => {
+    const row = block.rows[i];
+    const box = {
+      x: MARGIN + block.reach * 0.6,
+      y: row.y + ROW_LABEL_H + noteH,
+      width: Math.max(200, width - 2 * MARGIN - block.reach * 1.2),
+      height: row.h,
+    };
+    for (const path of stroke.paths(box, block.size, block.reach)) {
+      surface.paint(block.entry.settings, path, { fg, bg, seed: seed++ });
+    }
+  });
+
+  const data = (await surface.read()).slice();
+  surface.destroy();
+  return data;
+}
+
+/** How many strokes a block will draw, so seeds stay stable across blocks. */
+function strokeCount(block: BlockLayout, strokes: TestStroke[], width: number, noteH: number): number {
+  let n = 0;
+  strokes.forEach((stroke, i) => {
+    const row = block.rows[i];
+    const box = {
+      x: MARGIN + block.reach * 0.6,
+      y: row.y + ROW_LABEL_H + noteH,
+      width: Math.max(200, width - 2 * MARGIN - block.reach * 1.2),
+      height: row.h,
+    };
+    n += stroke.paths(box, block.size, block.reach).length;
+  });
+  return n;
+}
+
 export async function renderPlate(
   entries: PlateEntry[],
   options: PlateOptions = {},
 ): Promise<Plate> {
   const width = options.width ?? 1400;
   const annotate = options.annotate ?? false;
+  const noteH = annotate ? NOTE_H : 0;
   const strokeIds = options.strokes?.length ? options.strokes : DEFAULT_PLATE_STROKES;
   const strokes = strokeIds.map(findStroke).filter((s): s is TestStroke => !!s);
-  const noteH = annotate ? NOTE_H : 0;
 
   const blocks = entries.map((entry) => layoutBlock(entry, width, strokes, annotate));
   const height = blocks.reduce((a, b) => a + b.height, 0);
   if (height === 0) return { width, height: 0, rgba: new Uint8Array(0), rows: [] };
 
-  // One surface for the whole plate rather than one per brush. On the CPU
-  // renderer that is a small saving; on the GPU one it is the difference
-  // between a device per brush and a device per plate, which is most of what
-  // a multi-brush plate used to cost.
-  const backend =
-    typeof options.backend === 'string'
-      ? backendFactory(options.backend)
-      : options.backend ?? cpuBackend;
-  const surface = await Surface.create(width, height, backend);
-  const paper = options.paper ?? (options.dark ? PAPER_DARK : PAPER_LIGHT);
-  surface.fill([paper[0], paper[1], paper[2], 1]);
-
-  const fg = options.fg ?? (options.dark ? INK_DARK : INK_LIGHT);
-  const bg = options.bg ?? (options.dark ? INK_LIGHT : INK_DARK);
+  const rgba = new Uint8Array(width * height * 4);
   let seed = options.seed ?? 1;
   let offset = 0;
   for (const block of blocks) {
-    strokes.forEach((stroke, i) => {
-      const row = block.rows[i];
-      const box = {
-        x: MARGIN + block.reach * 0.6,
-        y: offset + row.y + ROW_LABEL_H + noteH,
-        width: Math.max(200, width - 2 * MARGIN - block.reach * 1.2),
-        height: row.h,
-      };
-      for (const path of stroke.paths(box, block.size, block.reach)) {
-        surface.paint(block.entry.settings, path, { fg, bg, seed: seed++ });
-      }
-    });
+    const data = await paintBlock(block, width, strokes, { ...options, annotate }, seed);
+    rgba.set(data, offset * width * 4);
+    seed += strokeCount(block, strokes, width, noteH);
     offset += block.height;
   }
-
-  const rgba = (await surface.read()).slice();
-  surface.destroy();
 
   // --- captions and rules, over the marks ---------------------------------
   const dark = !!options.dark;

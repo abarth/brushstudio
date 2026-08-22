@@ -16,21 +16,23 @@ most sandboxes are actually in:
 | | `cpu` | `gpu` |
 | --- | --- | --- |
 | `measure` the four starter brushes, 3 seeds | 4.3s | 20s |
-| `render` one brush, four rows | 1.9s | ~10s |
-| `render` the four-brush pack, every row | 5.0s | many minutes |
-| the test suite (21 cases) | 3.7s | minutes |
+| `render` one brush, four rows, no crosshatch | 1.8s | 7.2s |
+| `render` the four-brush pack, every row | 6.6s | many minutes |
+| the test suite (21 cases) | 3.5s | minutes |
 
-Big plates are where the gap turns into a different order of magnitude, and
-the reason is worth knowing because it is not about raw fill rate. Baking a
-stroke into its layer is a **fullscreen pass** on the GPU: it costs the same
-whether the stroke crossed the whole page or laid a mark sixty pixels tall.
-A full pack plate is around ten megapixels and holds a hundred strokes, so
-that is a billion fragment invocations for marks that cover a fraction of
-it. The CPU renderer tracks what each stroke actually touched and merges
-only that, which is most of why it wins here rather than merely keeping up.
+That last row is a different order of magnitude, and the reason is worth
+knowing because it is not about fill rate. Baking a stroke into its layer is
+a **fullscreen pass** on the GPU: it costs the same whether the stroke
+crossed the whole page or laid a mark sixty pixels tall. So a plate's GPU
+cost scales with the *number of strokes on it*, and the stroke count is not
+evenly spread — the crosshatch row alone draws over a hundred short strokes
+per brush, which is why a four-row plate without it renders in seconds and a
+full pack plate does not. The CPU renderer merges only the rectangle each
+stroke actually touched, so it barely notices.
 
-For a spot-check on the reference renderer, ask for less of it — one brush
-and a couple of rows, `--strokes flat,curves` — rather than a whole pack.
+For a spot-check on the reference renderer, ask for the rows that answer
+your question — `--strokes flat,curves` on one brush — rather than a whole
+pack. That is a seven-second command; the pack is not.
 
 ## Why there are two
 
