@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>brushstudio</title>
+    <link rel="stylesheet" href="/web/style.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>%F0%9F%96%8C</text></svg>"
+    />
+  </head>
+  <body>
+    <header>
+      <h1>brushstudio</h1>
+      <label>brush <select id="brush"></select></label>
+      <button id="clear">Clear</button>
+      <button id="save">Save PNG</button>
+      <label class="check"><input type="checkbox" id="dark" /> dark ground</label>
+      <span id="status"></span>
+    </header>
+    <main>
+      <canvas id="canvas"></canvas>
+      <aside>
+        <p id="notes"></p>
+        <div id="controls"></div>
+        <button id="copy">Copy settings patch</button>
+        <pre id="patch"></pre>
+      </aside>
+    </main>
+    <script type="module" src="/web/main.ts"></script>
+  </body>
+</html>

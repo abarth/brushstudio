@@ -1,0 +1,37 @@
+{
+  "name": "Spatter Spray 60",
+  "notes": "A scatter brush for flecks and spray. The point of interest is Count against Scatter: raising Count alone thickens the spray into a band, raising Scatter alone thins it out, and only both together give a spray that reads as airborne. Colour jitter is per tip so no two flecks match.",
+  "settings": {
+    "tip": { "shape": "spatter", "size": 60, "spacing": 0.35 },
+    "shape": {
+      "enabled": true,
+      "sizeControl": { "source": "pressure", "fadeSteps": 25 },
+      "sizeJitter": 0.55,
+      "minDiameter": 0.2,
+      "angleJitter": 1
+    },
+    "scatter": {
+      "enabled": true,
+      "bothAxes": true,
+      "scatter": 2.4,
+      "scatterControl": { "source": "pressure", "fadeSteps": 25 },
+      "count": 4,
+      "countJitter": 0.4
+    },
+    "color": {
+      "enabled": true,
+      "applyPerTip": true,
+      "hueJitter": 0.04,
+      "satJitter": 0.2,
+      "briJitter": 0.25
+    },
+    "transfer": {
+      "enabled": true,
+      "opacityJitter": 0.35,
+      "opacityMin": 0.3,
+      "flowJitter": 0.3,
+      "flowMin": 0.2
+    },
+    "flow": 0.9
+  }
+}

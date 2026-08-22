@@ -1,0 +1,55 @@
+{
+  "name": "Loaded Bristle 120",
+  "notes": "An oil brush that keeps its comb through a turn: the tip follows the stroke direction, and the dual mask breaks the body up so a long stroke never reads as one flat ribbon. Flow over spacing sets the flank hardness \u2014 here it is high enough to square the edge off, which is what separates a loaded brush from a wash. Because that ratio saturates the mark at every pressure, pressure is bound to Transfer opacity as well: without it, a light stroke and a heavy one lay down the same ink and the brush feels dead.",
+  "settings": {
+    "tip": {
+      "shape": "bristle-chisel",
+      "size": 120,
+      "spacing": 0.07,
+      "roundness": 0.55
+    },
+    "shape": {
+      "enabled": true,
+      "sizeControl": {
+        "source": "pressure",
+        "fadeSteps": 25
+      },
+      "minDiameter": 0.45,
+      "angleControl": {
+        "source": "direction",
+        "fadeSteps": 25
+      },
+      "roundnessControl": {
+        "source": "pressure",
+        "fadeSteps": 25
+      },
+      "minRoundness": 0.45
+    },
+    "dual": {
+      "enabled": true,
+      "shape": "fiber-drag",
+      "size": 130,
+      "spacing": 0.2,
+      "scatter": 0.75,
+      "bothAxes": true,
+      "count": 1,
+      "mode": "multiply"
+    },
+    "transfer": {
+      "enabled": true,
+      "opacityControl": {
+        "source": "pressure",
+        "fadeSteps": 25
+      },
+      "opacityMin": 0.25,
+      "flowControl": {
+        "source": "pressure",
+        "fadeSteps": 25
+      },
+      "flowMin": 0.35
+    },
+    "flow": 0.85,
+    "opacity": 1,
+    "smoothing": 0.25
+  }
+}

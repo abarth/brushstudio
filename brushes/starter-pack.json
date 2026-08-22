@@ -1,0 +1,10 @@
+{
+  "name": "Brushstudio Starters",
+  "notes": "The four reference designs, as one .abr. Export it and load it in Photoshop to check the harness against the real thing.",
+  "brushes": [
+    "round-soft.json",
+    "chalk-dry.json",
+    "bristle-oil.json",
+    "spatter-spray.json"
+  ]
+}
