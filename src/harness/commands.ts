@@ -1,4 +1,4 @@
-import { parseAbr } from '../brush/abr';
+import { dumpDescriptor, parseAbr } from '../brush/abr';
 import { writeAbr } from '../brush/abrWrite';
 import { defaultBrush, makeBrush } from '../brush/defaults';
 import { registerPattern, registerTip } from '../brush/patterns';
@@ -190,6 +190,22 @@ export function inspectAbr(abr: string | Uint8Array | ArrayBuffer, path: string)
     // it is the pack telling us where our schema is wrong or incomplete.
     issues: parsed.issues,
   };
+}
+
+/**
+ * Every brush's descriptor as text, for holding two files side by side: a
+ * pack Photoshop wrote and one we did, diffed key by key.
+ */
+export function dumpAbr(abr: string | Uint8Array | ArrayBuffer, only?: number) {
+  const parsed = parseAbr(toArrayBuffer(abr));
+  return parsed.brushes.flatMap((b, i) => {
+    if (only !== undefined && only !== i) return [];
+    return [
+      `[${i}] ${b.name} — ${b.raw ? b.raw.classId : '(no descriptor)'} {`,
+      ...(b.raw ? dumpDescriptor(b.raw) : []),
+      '}',
+    ];
+  });
 }
 
 /** Writes an .abr and immediately reads it back, reporting what did not survive. */

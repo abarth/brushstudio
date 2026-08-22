@@ -24,6 +24,8 @@ import type { BrushPatch, DynamicControl, TextureBlend } from './types';
 
 export interface AbrBrush {
   name: string;
+  /** the descriptor exactly as parsed, for comparing one file against another */
+  raw?: Descriptor;
   /** id of the sampled tip in `tips`, or null for a computed round brush */
   tipId: string | null;
   /** id of the texture pattern in `patterns`, when the brush uses Texture */
@@ -260,7 +262,7 @@ function readSampledBitmap(r: Reader): GrayMap | null {
 // Actions-format descriptor parsing
 // ---------------------------------------------------------------------------
 
-type DescValue =
+export type DescValue =
   | { t: 'long'; v: number }
   | { t: 'doub'; v: number }
   | { t: 'unit'; unit: string; v: number }
@@ -278,7 +280,7 @@ type DescValue =
  * is rejected as an unknown brush type — so a reader that drops it cannot
  * tell a file Photoshop will open from one it will refuse.
  */
-interface Descriptor {
+export interface Descriptor {
   classId: string;
   fields: Record<string, DescValue>;
 }
@@ -663,6 +665,20 @@ function mapTip(f: Fields | undefined): TipInfo {
 }
 
 /** Keys of a brushPreset that are read below; the rest get reported. */
+/**
+ * Keys real Photoshop packs carry for features this engine does not model,
+ * listed so `inspect` keeps reporting only what is genuinely new: `wtVr` and
+ * `mxVr` are the Mixer Brush's wet and mix dynamics, `protectTexture` is the
+ * Texture panel's Protect Texture, and the smoothing booleans are the CC2018
+ * options-bar refinements that sit beside the Smoothing amount.
+ */
+const UNMODELLED_PRESET_KEYS = ['wtVr', 'mxVr', 'protectTexture'];
+
+const UNMODELLED_TOOL_KEYS = [
+  'smoothingRadiusMode', 'smoothingCatchup', 'smoothingCatchupAtEnd',
+  'smoothingZoomCompensation', 'pressureSmoothing',
+];
+
 const PRESET_KEYS = [
   'Nm', 'Brsh', 'useTipDynamics', 'flipX', 'flipY', 'brushProjection',
   'minimumDiameter', 'minimumRoundness', 'tiltScale', 'szVr', 'angleDynamics',
@@ -674,11 +690,13 @@ const PRESET_KEYS = [
   'useColorDynamics', 'colorDynamicsPerTip', 'perTip', 'clVr', 'H', 'Strt',
   'Brgh', 'purity', 'Wtdg', 'Nose', 'Rpt', 'useBrushSize', 'useBrushPose',
   'toolOptions',
+  ...UNMODELLED_PRESET_KEYS,
 ];
 
 const TOOL_KEYS = [
   'brushPreset', 'flow', 'Smoo', 'Md', 'Opct', 'smoothing', 'smoothingValue',
   'usePressureOverridesSize', 'usePressureOverridesOpacity', 'useLegacy',
+  ...UNMODELLED_TOOL_KEYS,
 ];
 
 /** Maps one brushPreset descriptor to a name/tip/pattern/settings record. */
@@ -743,7 +761,8 @@ function mapBrushDescriptor(d: Descriptor, index: number, issues: AbrIssue[]): A
       // up to +-half a diameter)
       scatter: Math.min(sc.jitter, 10),
       scatterControl: sc.control,
-      count: Math.min(Math.max(f.int('Cnt') ?? 1, 1), 16),
+      // Count is stored as a double, not the integer it looks like
+      count: Math.min(Math.max(Math.round(f.dbl('Cnt') ?? 1), 1), 16),
       countJitter: clamp01(cnt.jitter),
     };
   }
@@ -829,7 +848,7 @@ function mapBrushDescriptor(d: Descriptor, index: number, issues: AbrIssue[]): A
       ),
       scatter: Math.min(dualScatter.jitter, 10),
       bothAxes: dualDesc.flag('bothAxes') ?? false,
-      count: Math.min(Math.max(dualDesc.int('Cnt') ?? 1, 1), 16),
+      count: Math.min(Math.max(Math.round(dualDesc.dbl('Cnt') ?? 1), 1), 16),
       countJitter: clamp01(dualCount.jitter),
     };
   }
@@ -868,10 +887,48 @@ function mapBrushDescriptor(d: Descriptor, index: number, issues: AbrIssue[]): A
 
   return {
     name: f.text('Nm') ?? '',
+    raw: d,
     tipId: tip.tipId,
     texturePatternId,
     settings,
   };
+}
+
+/**
+ * The descriptor as text: every key, its type and its value, nested.
+ *
+ * This is the view that answers "what does Photoshop actually write here",
+ * and the only way to see what a pack has that our file does not — a reader
+ * reports a key at the wrong type, but it cannot report a key that is simply
+ * absent, because most of them legitimately are.
+ */
+export function dumpDescriptor(d: Descriptor, indent = ''): string[] {
+  const out: string[] = [];
+  const pad = `${indent}  `;
+  for (const [key, v] of Object.entries(d.fields)) {
+    switch (v.t) {
+      case 'desc':
+        out.push(`${pad}${key}: Objc ${v.v.classId} {`);
+        out.push(...dumpDescriptor(v.v, pad));
+        out.push(`${pad}}`);
+        break;
+      case 'list':
+        out.push(`${pad}${key}: VlLs [${v.v.length}]`);
+        break;
+      case 'unit':
+        out.push(`${pad}${key}: UntF ${v.unit} ${v.v}`);
+        break;
+      case 'enum':
+        out.push(`${pad}${key}: enum ${v.enumType} ${v.v}`);
+        break;
+      case 'other':
+        out.push(`${pad}${key}: ${v.osType}`);
+        break;
+      default:
+        out.push(`${pad}${key}: ${v.t} ${JSON.stringify(v.v)}`);
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------

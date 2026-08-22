@@ -72,6 +72,7 @@ const USAGE = `brushstudio — a harness for designing Photoshop brushes
   compare <brush.json…> --ref A.abr[#name]
                                         one plate holding design and reference
   inspect <file.abr>                    read a Photoshop pack apart
+  inspect <file.abr> --dump [n]         the raw descriptor, key by key
   export  <brush.json… | pack.json>     write a .abr, then read it back to check
 
 Common flags
@@ -249,6 +250,15 @@ async function main() {
           ? Number(flag('only'))
           : flag('only')
         : undefined;
+
+      if (flags.has('dump')) {
+        // the raw descriptor, for holding this file next to another one
+        const which = flag('dump');
+        const index = which === true ? undefined : Number(which);
+        const lines = await run((h) => h.dumpAbr(bytes, index));
+        console.log(lines.join('\n'));
+        break;
+      }
 
       const { report, tipSheet, plate } = await run(async (h) => {
         const report = await h.inspectAbr(bytes, basename(path));

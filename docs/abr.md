@@ -69,6 +69,11 @@ API, which reads and writes these same descriptors through `getInteger`,
 `getUnitDouble` and friends, and a key at the wrong type is a key Photoshop
 refuses rather than a near miss.
 
+Everything here has been read back out of a pack Photoshop itself wrote,
+with the reader in strict mode reporting anything that disagreed — which is
+how `Cnt ` was caught being a `doub`. The rows still marked *inferred* are
+the ones that pack did not happen to exercise.
+
 One rule governs the whole table: **the Brush Settings panel stores
 percentages as `UntF` `#Prc` unit floats, and the options bar stores whole
 integers.** `toolOptions` is the options bar, which is why Opacity, Flow and
@@ -95,14 +100,19 @@ rejects a tip at any other class with "unknown brush type".
 | `szVr` `angleDynamics` `roundnessDynamics` `scatterDynamics` `countDynamics` `opVr` `prVr` `clVr` `textureDepthDynamics` | `Objc` classed `brVr` | one dynamics object each |
 | `bVTy` `fStp` | `long` | inside `brVr`: control source, fade steps |
 | `jitter` `Mnm ` | `UntF #Prc` | inside `brVr`: the jitter and its minimum |
-| `Cnt ` | `long` | scatter count, a count not a percentage |
+| `Cnt ` | `doub` | count — in `dualBrush` and in Scattering; it looks like an integer and is not one |
 | `textureScale` `textureDepth` `minimumDepth` | `UntF #Prc` | Texture amounts |
-| `textureBrightness` `textureContrast` | `long` | the Texture panel's integer sliders (-150..150, -50..100) |
+| `textureBrightness` `textureContrast` | `long` | the Texture panel's integer sliders (-150..150, -50..100) — *inferred* |
 | `textureBlendMode` `BlnM` `Md  ` | `enum` `BlnM` | blend modes |
 | `H   ` `Strt` `Brgh` `purity` | `UntF #Prc` | Color Dynamics |
 | `Wtdg` `Nose` `Rpt ` | `bool` | wet edges, noise, airbrush |
 
-**The options bar** — `toolOptions`, classed `PbTl`.
+**The options bar** — `toolOptions`, classed `PbTl`. There is no *Include
+Tool Settings* flag: a preset saved with tool settings carries this
+descriptor and one saved without simply has none, which is why such a brush
+imports painting at whatever the tool was already set to. (Verified: one
+brush in a real pack has no `toolOptions` at all, and every other brush in
+the same pack has one.)
 
 | key | type | is | evidence |
 | --- | --- | --- | --- |
@@ -116,17 +126,14 @@ rejects a tip at any other class with "unknown brush type".
 
 **Still unsettled**, and marked here so nobody re-derives it from scratch:
 
-* `smoothingValue`'s 0..255 scale rests on one Adobe forum recipe, not on a
-  file anyone here has read. `Smoo` is written and read first, so the scale
-  only matters if Photoshop prefers the other key.
+* `smoothingValue`'s 0..255 scale rests on one Adobe forum recipe. The pack
+  read so far has Smoothing at 0 on every brush that carries it, which tells
+  us nothing about the scale. `Smoo` is written and read first, so this only
+  matters if Photoshop prefers the other key.
 * `textureBrightness` and `textureContrast` as `long` is inferred from the
-  sliders being integers in the UI, not from a documented type.
-* Whether Photoshop applies a preset's `toolOptions` on import at all is a
-  separate question from the types: a brush preset only restores the options
-  bar when it was saved with **Include Tool Settings**, and which key records
-  that choice is not documented anywhere we could find.
-
-Any pack in `refs/` can settle all three — see below.
+  sliders being integers in the UI; no pack read so far sets either.
+* The Scattering panel's `Cnt ` is assumed to match `dualBrush`'s, which is
+  verified. No pack read so far has Scattering enabled.
 
 ## What a pack can tell you
 
@@ -134,9 +141,15 @@ Any pack in `refs/` can settle all three — see below.
 this table against a file Photoshop itself wrote:
 
 ```bash
-npm run brush -- inspect refs/SomePack.abr        # a `descriptor issues` section, when there is one
-npm run brush -- inspect refs/SomePack.abr --json # every issue, structured
+npm run brush -- inspect refs/SomePack.abr          # a `descriptor issues` section, when there is one
+npm run brush -- inspect refs/SomePack.abr --json   # every issue, structured
+npm run brush -- inspect refs/SomePack.abr --dump 0 # the raw descriptor of one brush
 ```
+
+`--dump` is the one to reach for when a brush imports wrong and nothing is
+*reported*: a reader can flag a key at the wrong type, but not a key that is
+simply absent, since most of them legitimately are. Dump the same brush from
+a pack Photoshop wrote and from one we wrote, and diff the two.
 
 Three kinds show up there. A **type** or **class** issue on a real pack means
 our table is wrong and should be corrected — Photoshop wrote that file, so it
@@ -154,7 +167,9 @@ have no representation in the file format:
   gets the mark but not the generator. A procedural tip therefore lands as a
   fixed sampled tip at the resolution it was generated at.
 * **Photoshop-only features** the engine does not model — bristle tips,
-  erodible tips, airbrush cones, brush poses — are neither read nor written.
+  erodible tips, airbrush cones, brush poses, the Mixer Brush's wet and mix
+  dynamics (`wtVr`, `mxVr`), Protect Texture, and the CC2018 smoothing
+  refinements beside the Smoothing amount — are neither read nor written.
   A pack using them will import with those brushes reduced to what is
   representable, which `inspect` will show plainly.
 

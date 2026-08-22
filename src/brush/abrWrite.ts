@@ -426,7 +426,9 @@ function brushPreset(
   if (s.scatter.enabled) {
     items.push(
       ['bothAxes', T.bool(s.scatter.bothAxes)],
-      ['Cnt ', T.long(s.scatter.count)],
+      // Count is a double in a real pack (verified in dualBrush; the
+      // Scattering panel's own Count is the same control, so it follows)
+      ['Cnt ', T.doub(s.scatter.count)],
       ['scatterDynamics', dyn(s.scatter.scatterControl, pct(s.scatter.scatter))],
       ['countDynamics', dyn({ source: 'off', fadeSteps: 1 }, pct(s.scatter.countJitter))],
     );
@@ -444,7 +446,7 @@ function brushPreset(
           ['BlnM', T.enm('BlnM', BLEND_ENUM[d.mode] ?? 'Mltp')],
           ['useScatter', T.bool(d.scatter > 0)],
           ['Spcn', T.untf('#Prc', pct(d.spacing))],
-          ['Cnt ', T.long(d.count)],
+          ['Cnt ', T.doub(d.count)],
           ['bothAxes', T.bool(d.bothAxes)],
           ['countDynamics', dyn({ source: 'off', fadeSteps: 1 }, pct(d.countJitter))],
           ['scatterDynamics', dyn({ source: 'off', fadeSteps: 25 }, pct(d.scatter))],

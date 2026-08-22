@@ -309,6 +309,20 @@ export async function runCases(BS, backend = 'cpu') {
     assert(written.issues.length === 0, written.issues.join('; '));
   });
 
+  await test('a count survives as the double Photoshop stores it as', async () => {
+    // Count looks like an integer and is not one: a real pack stores it as a
+    // 'doub', and reading it as a long left every dual brush we imported
+    // sitting at a count of 1.
+    const written = await BS.exportAbr([doc({
+      scatter: { enabled: true, count: 4 },
+      dual: { enabled: true, shape: 'grain', count: 3, spacing: 0.3 },
+    })], {});
+    assert(written.issues.length === 0, written.issues.join('; '));
+    const { patch } = BS.inspectAbr(written.abr, 'counts.abr').brushes[0];
+    assert(patch.scatter.count === 4, `scatter count came back ${patch.scatter.count}`);
+    assert(patch.dual.count === 3, `dual count came back ${patch.dual.count}`);
+  });
+
   await test('a value at the wrong type is refused, not unwrapped', async () => {
     // Everything the round-trip check is worth rests on the reader being
     // able to tell a value Photoshop would refuse from one it would read.
