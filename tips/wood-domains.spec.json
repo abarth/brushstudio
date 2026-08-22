@@ -1,0 +1,69 @@
+{
+  "name": "wood-domains",
+  "notes": "Plank wood as oriented angular domains: coarse Worley patches each filled with elongated sub-cells aligned to the patch's own grain direction. Growth rings were tried and rejected - a ring bullseye is the worst-case iconic motif for a non-rotating dual mask, recurring visibly along the stroke. Levels 30/55/80 = light/medium/heavy, calibrated to core-band stroke coverage by tools/fractal-tip.mjs --calibrate; verified by tools/spectrum-audit.mjs.",
+  "native": 1024,
+  "seed": 21169417,
+  "outDir": ".",
+  "field": {
+    "kind": "domains",
+    "cells": 7,
+    "subCells": 26,
+    "aspect": 5,
+    "domainWeight": 0.4,
+    "cellWeight": 0.8,
+    "wallWidth": 0.05,
+    "wallDepth": 0.45,
+    "warp": 0.015,
+    "fbmWeight": 0.22
+  },
+  "spectrum": {
+    "bandLoCyclesPerDia": 0.75,
+    "shoulderCyclesPerDia": 3,
+    "lowSlope": 1.5,
+    "beta": 2.2,
+    "kneeCyclesPerDia": 8,
+    "beta2": 3.5,
+    "cutCyclesPerDia": 45,
+    "taperCyclesPerDia": 55
+  },
+  "vignette": {
+    "inner": 0.8,
+    "rag": 0.22
+  },
+  "aaCanvasPx": 0.5,
+  "train": {
+    "size": 120,
+    "flow": 0.9,
+    "primary": {
+      "hardness": 0.85,
+      "spacing": 0.12,
+      "sizeJitter": 0.15,
+      "minDiameter": 0.45
+    },
+    "dual": {
+      "sizeRatio": 1.3,
+      "spacing": 0.33,
+      "scatter": 0.7,
+      "count": 1
+    }
+  },
+  "levels": [
+    {
+      "coverage": 0.3,
+      "q": 0.0502
+    },
+    {
+      "coverage": 0.55,
+      "q": 0.134
+    },
+    {
+      "coverage": 0.8,
+      "q": 0.5293,
+      "train": {
+        "dual": {
+          "spacing": 0.5
+        }
+      }
+    }
+  ]
+}

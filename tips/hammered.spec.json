@@ -1,0 +1,77 @@
+{
+  "name": "hammered",
+  "notes": "Peened metal as a dual-gated triple: flat-toned polygonal dents (per-cell value dominant, dome shading a hint), bright facet rims via negative wall depth. Coverage is the damage dial per the review principle: damage is a delta from baseline, contrast/coverage is how much of it there is. Levels 30/55/80 = light/medium/heavy, calibrated to core-band stroke coverage by tools/fractal-tip.mjs --calibrate; verified by tools/spectrum-audit.mjs.",
+  "native": 1024,
+  "seed": 28035381,
+  "outDir": ".",
+  "field": {
+    "kind": "cellular",
+    "scales": [
+      {
+        "cells": 9,
+        "weight": 1,
+        "f1Weight": 0.22
+      },
+      {
+        "cells": 19,
+        "weight": 0.3,
+        "f1Weight": 0.08
+      }
+    ],
+    "warp": 0.012,
+    "fbmWeight": 0.1,
+    "wallScaleIndex": 0,
+    "wallWidth": 0.07,
+    "wallDepth": -0.4
+  },
+  "spectrum": {
+    "bandLoCyclesPerDia": 0.75,
+    "shoulderCyclesPerDia": 3,
+    "lowSlope": 1.5,
+    "beta": 2.2,
+    "kneeCyclesPerDia": 8,
+    "beta2": 3.5,
+    "cutCyclesPerDia": 45,
+    "taperCyclesPerDia": 55
+  },
+  "vignette": {
+    "inner": 0.8,
+    "rag": 0.22
+  },
+  "aaCanvasPx": 0.45,
+  "train": {
+    "size": 120,
+    "flow": 0.9,
+    "primary": {
+      "hardness": 0.85,
+      "spacing": 0.12,
+      "sizeJitter": 0.15,
+      "minDiameter": 0.45
+    },
+    "dual": {
+      "sizeRatio": 1.3,
+      "spacing": 0.33,
+      "scatter": 0.7,
+      "count": 1
+    }
+  },
+  "levels": [
+    {
+      "coverage": 0.3,
+      "q": 0.138
+    },
+    {
+      "coverage": 0.55,
+      "q": 0.3084
+    },
+    {
+      "coverage": 0.8,
+      "q": 0.6312,
+      "train": {
+        "dual": {
+          "spacing": 0.5
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "name": "leather",
+  "notes": "Pebbled leather: flat-toned grains (per-cell value dominant over dome shading, per review: contrast lives BETWEEN domains, not within), crease network via deep walls. The fine-grained sibling was scrapped on review; this is the single leather. Levels 30/55/80 = light/medium/heavy, calibrated to core-band stroke coverage by tools/fractal-tip.mjs --calibrate; verified by tools/spectrum-audit.mjs.",
+  "native": 1024,
+  "seed": 24325116,
+  "outDir": ".",
+  "field": {
+    "kind": "cellular",
+    "scales": [
+      {
+        "cells": 20,
+        "weight": 0.95,
+        "f1Weight": 0.2
+      }
+    ],
+    "warp": 0.02,
+    "fbmWeight": 0.12,
+    "wallScaleIndex": 0,
+    "wallWidth": 0.12,
+    "wallDepth": 1.5
+  },
+  "spectrum": {
+    "bandLoCyclesPerDia": 1,
+    "shoulderCyclesPerDia": 5,
+    "lowSlope": 1.5,
+    "beta": 1.8,
+    "kneeCyclesPerDia": 16,
+    "beta2": 3.5,
+    "cutCyclesPerDia": 60,
+    "taperCyclesPerDia": 70
+  },
+  "vignette": {
+    "inner": 0.8,
+    "rag": 0.22
+  },
+  "aaCanvasPx": 0.5,
+  "train": {
+    "size": 120,
+    "flow": 0.9,
+    "primary": {
+      "hardness": 0.85,
+      "spacing": 0.12,
+      "sizeJitter": 0.15,
+      "minDiameter": 0.45
+    },
+    "dual": {
+      "sizeRatio": 1.3,
+      "spacing": 0.33,
+      "scatter": 0.7,
+      "count": 1
+    }
+  },
+  "levels": [
+    {
+      "coverage": 0.3,
+      "q": 0.1006
+    },
+    {
+      "coverage": 0.55,
+      "q": 0.2131
+    },
+    {
+      "coverage": 0.8,
+      "q": 0.5617,
+      "train": {
+        "dual": {
+          "spacing": 0.5
+        }
+      }
+    }
+  ]
+}

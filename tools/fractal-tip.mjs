@@ -478,6 +478,29 @@ function faultsField(f) {
       }
     }
   }
+  // Each fault is a GLOBAL half-plane, so the sum is DC-heavy: its coarse
+  // imbalance makes a 50%-ish threshold cut nearly half-and-half at tip
+  // scale — and a mask like that bares whole stretches of stroke. An
+  // optional high-pass removes structure coarser than highpassK c/dia;
+  // pane interiors stay flat (they are much smaller than the cut) while
+  // the tip-scale light/dark halves equalize.
+  if (f.highpassK) {
+    const re = Float64Array.from(out);
+    const im = new Float64Array(N * N);
+    fft2d(re, im, N);
+    for (let y = 0; y < N; y++) {
+      const fy = binFreq(y, N);
+      for (let x = 0; x < N; x++) {
+        const k = Math.hypot(binFreq(x, N), fy) * N;
+        if (k < f.highpassK) {
+          re[y * N + x] = 0;
+          im[y * N + x] = 0;
+        }
+      }
+    }
+    fft2d(re, im, N, true);
+    out.set(re);
+  }
   if (f.fbmWeight) {
     const fbm = synthField(buildAmp(null), makePhases(spec.seed + 7));
     let vari = 0;
@@ -559,7 +582,13 @@ function scratchesField(f) {
     const ay = rng() * N;
     const bx = ax + L * Math.cos(th);
     const by = ay + L * Math.sin(th);
-    const bend = (f.curvature ?? 0.08) * L * (rng() * 2 - 1);
+    // a wear history mixes tools: swirlFraction of the scratches take the
+    // deep swirl curvature, the rest stay near-linear
+    const curv =
+      f.swirlFraction && rng() < f.swirlFraction
+        ? (f.curvatureSwirl ?? 1)
+        : (f.curvature ?? 0.08);
+    const bend = curv * L * (rng() * 2 - 1);
     const cx = (ax + bx) / 2 - Math.sin(th) * bend;
     const cy = (ay + by) / 2 + Math.cos(th) * bend;
     const steps = Math.max(2, Math.ceil(L / (0.75 * w)));

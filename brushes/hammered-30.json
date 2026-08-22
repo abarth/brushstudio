@@ -1,0 +1,38 @@
+{
+  "name": "Hammered 30",
+  "id": "hammered-30",
+  "notes": "Peened metal: flat-toned polygonal dents, contrast between dents not within them, bright facet rims. Coverage is the damage dial: damage is a delta from the baseline material, and the level is how much of it there is. Dual-gate architecture (docs/fractal-texture-math.md par.9): the mask multiplies the finished stroke once, so its structure survives the paint train; canvas-anchored delivery was considered for the damage textures and rejected in review in favour of dual-gating everything. Tips synthesized and calibrated from tips/hammered.spec.json (levels 30/55/80 = core-band stroke coverage); spectral verification by tools/spectrum-audit.mjs. First peening: scattered flat dents.",
+  "tips": {
+    "mask": {
+      "image": "../tips/hammered-30.png"
+    }
+  },
+  "settings": {
+    "tip": {
+      "shape": "round",
+      "size": 120,
+      "hardness": 0.85,
+      "spacing": 0.12
+    },
+    "shape": {
+      "enabled": true,
+      "sizeControl": {
+        "source": "pressure",
+        "fadeSteps": 25
+      },
+      "sizeJitter": 0.15,
+      "minDiameter": 0.45
+    },
+    "dual": {
+      "enabled": true,
+      "shape": "@mask",
+      "size": 156,
+      "spacing": 0.33,
+      "scatter": 0.7,
+      "bothAxes": true,
+      "count": 1,
+      "mode": "multiply"
+    },
+    "flow": 0.9
+  }
+}
