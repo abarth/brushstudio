@@ -1,7 +1,7 @@
 {
   "name": "Scratched Metal 55",
   "id": "scratched-metal-55",
-  "notes": "A worked metal surface: one merged scratch history, 55% near-linear and 45% deep-swirl strokes with heavy-tailed lengths, widths and depths, gating a solid primary. Dual-gate architecture (docs/fractal-texture-math.md par.9): the mask multiplies the finished stroke once, so its structure survives the paint train; canvas-anchored delivery was considered for the damage textures and rejected in review in favour of dual-gating everything. Tips synthesized and calibrated from tips/scratched-metal.spec.json (levels 30/55/80 = core-band stroke coverage); spectral verification by tools/spectrum-audit.mjs. A working surface: dense resolvable scratch tangle.",
+  "notes": "A worked metal surface: one merged scratch history, 55% near-linear and 45% deep-swirl strokes with heavy-tailed lengths, widths and depths, gating a solid primary. TONAL dual-gate: the mask is the tone-mapped texture field itself, not a threshold cut, so the stroke carries the texture as graded alpha and a window from a stroke matches the designed height field. The level number is the damage/modulation DEPTH (contrast dial): damage is a delta from the intact material, so moderate damage = moderate contrast - per review. Two deconvolutions bind the stroke to the design (docs/fractal-texture-math.md): the spectral 1/H pre-compensation on the field's fbm band, and the value-curve inverse v = 1-(depth*damage)^(1/n) that undoes the mask train's ~n-stamp over-compositing. Threshold-cut coverage masks were the first shipped form and were revised on review (maximal contrast everywhere, stroke windows unlike the swatch fields). Mapping delta+invert: the intact metal renders as a mid-tone wash and the scratch history carves DARKER marks into it. Worked: legible scratch web over toned metal. Tips from tips/scratched-metal.spec.json; audited by tools/spectrum-audit.mjs.",
   "tips": {
     "mask": {
       "image": "../tips/scratched-metal-55.png"
@@ -27,7 +27,7 @@
       "enabled": true,
       "shape": "@mask",
       "size": 156,
-      "spacing": 0.33,
+      "spacing": 0.28,
       "scatter": 0.7,
       "bothAxes": true,
       "count": 1,

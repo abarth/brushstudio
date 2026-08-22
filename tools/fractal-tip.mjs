@@ -779,6 +779,56 @@ const vignette = (() => {
   return out;
 })();
 
+/**
+ * Tonal mask (spec.maskMode: "tonal"): instead of a threshold cut, the tip
+ * carries the tone-mapped field itself, so the gated stroke is the texture
+ * as graded alpha — damage as a DELTA from the intact material, with
+ * `depth` the damage dial (moderate damage = moderate contrast).
+ *
+ * Two deconvolutions make the painted stroke match the designed field:
+ * - value curve: the mask over-composites ≈ n̄ overlapping stamps
+ *   (m = 1 − Π(1 − v)), so each stamp carries v = 1 − (depth·damage)^(1/n̄)
+ *   and the accumulated mask lands on 1 − depth·damage;
+ * - the spectral 1/H pre-compensation already in the field's fbm band.
+ *
+ * damage01 mapping: "modulate" rank-equalizes the field (domain materials —
+ * every value populated, depth sets the visible contrast); "delta" ramps
+ * from the field's median to its 99.5th percentile, so a mostly-background
+ * field (scratches) leaves the baseline untouched at exactly 0 damage.
+ */
+function tonalTip(field, sorted, depth) {
+  const t = spec.tonal ?? {};
+  const nBar = 0.8 / ((spec.train.dual.spacing ?? 0.33) * 0.95);
+  const data = new Uint8Array(N * N);
+  const delta = (t.mode ?? 'modulate') === 'delta';
+  const lo = delta ? sorted[Math.floor(sorted.length * 0.5)] : 0;
+  const hi = delta ? sorted[Math.floor(sorted.length * 0.995)] : 1;
+  // rank01 via the plateau-sorted table: binary search per pixel is fine
+  const rank01 = (v) => {
+    let a = 0;
+    let b = sorted.length - 1;
+    while (a < b) {
+      const m = (a + b) >> 1;
+      if (sorted[m] < v) a = m + 1;
+      else b = m;
+    }
+    return a / (sorted.length - 1);
+  };
+  for (let i = 0; i < field.length; i++) {
+    let damage = delta
+      ? clamp((field[i] - lo) / Math.max(hi - lo, 1e-9), 0, 1)
+      : rank01(field[i]);
+    // invert: the STRUCTURE keeps full paint and the ground carves — a
+    // mid-tone material with darker marks (scratches as shadowed gouges)
+    // instead of a solid material with lightened marks
+    if (t.invert) damage = 1 - damage;
+    const carve = depth * damage;
+    const v = 1 - Math.pow(Math.max(carve, 1e-12), 1 / nBar) * (carve > 0 ? 1 : 0);
+    data[i] = Math.round(clamp(v * (vignette ? vignette[i] : 1), 0, 1) * 255);
+  }
+  return data;
+}
+
 /** Threshold + AA + vignette → final byte map. */
 function finishTip(field, sorted, q) {
   const t = quantile(sorted, q);
@@ -1063,9 +1113,15 @@ for (const level of spec.levels) {
 
   let q = level.q;
   let measured = null;
-  let bytes = finishTip(field, sorted, q);
+  let bytes;
+  if (spec.maskMode === 'tonal') {
+    // deterministic: the depth dial needs no coverage calibration
+    bytes = tonalTip(field, sorted, level.depth);
+  } else {
+    bytes = finishTip(field, sorted, q);
+  }
 
-  if (CALIBRATE) {
+  if (CALIBRATE && spec.maskMode !== 'tonal') {
     for (let iter = 0; iter < 5; iter++) {
       harness.registerTip(name, { size: N, data: bytes });
       measured = await probeCoverage(harness, name, level);
@@ -1084,13 +1140,13 @@ for (const level of spec.levels) {
   for (const b of bytes) inkSum += b;
   report.push({
     level: `${pct}%`,
-    q: q.toFixed(4),
+    q: spec.maskMode === 'tonal' ? `depth ${level.depth}` : q.toFixed(4),
     tipInk: (inkSum / 255 / bytes.length).toFixed(4),
     core: measured === null ? '—' : measured.core.toFixed(4),
     box: measured === null ? '—' : measured.box.toFixed(4),
   });
   console.log(
-    `  ${name}.png  q=${q.toFixed(4)}  ` +
+    `  ${name}.png  ${spec.maskMode === 'tonal' ? `depth=${level.depth}` : `q=${q.toFixed(4)}`}  ` +
       (measured === null
         ? ''
         : `core ${measured.core.toFixed(3)} (target ${level.coverage}) · box ${measured.box.toFixed(3)}`),

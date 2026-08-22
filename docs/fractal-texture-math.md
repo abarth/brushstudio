@@ -358,6 +358,37 @@ marble family had to densify its vein field until no single shape was
 memorable. If a future engine change adds dual rotation, that constraint
 relaxes.
 
+**Tonal masks, and what is actually deconvolved.** A threshold cut throws
+the field's tonal information away and renders at maximal contrast; a
+TONAL mask (`maskMode: "tonal"`) ships the tone-mapped field itself, so
+the gated stroke carries the texture as graded alpha and a window cut from
+a stroke matches the designed height field — damage as a *delta* from the
+intact material, with `depth` the contrast dial. Getting that match takes
+two separate deconvolutions, and it is worth being precise about which
+kernel each one undoes:
+
+* **Second moment (spectrum):** the `1/H` division of §3 undoes the
+  scatter kernel's variance filtering. It applies fully to spectral
+  fields, but for the structural generators it only shapes their *fbm
+  component* — Worley cells, scratch strokes, fault steps and vein ridges
+  are laid in the spatial domain and are not spectrally pre-compensated.
+* **First moment (value curve):** the mask buffer over-composites, so
+  `n̄ ≈ c̄/Δ_dual` overlapping stamps accumulate `m = 1 − Π(1 − v)`. To
+  land the accumulated mask on a target `1 − depth·damage(x)`, each stamp
+  must carry `v = 1 − (depth·damage)^(1/n̄)` — without this inverse, mid
+  tones compress toward white and the painted texture is flatter than the
+  design.
+
+Two approximations remain, both benign at the shipped trains and checked
+by the stroke-window comparison rather than assumed: overlapping stamps
+sample the SAME bitmap at small offsets, so the union is correlated (the
+value inverse treats it as exact re-stamping, which it nearly is at
+`S ≈ 0.35·d_dual`); and the scatter offsets smear the tonal field by the
+scatter marginal — visible as a soft burnish mottle, not as lost
+structure. A tonal `delta` mapping can be inverted (`invert: true`) so
+the structure keeps full paint and the ground carves: scratches as darker
+gouges in a mid-tone material rather than pale lines in a solid one.
+
 Then calibrate `q` per level against painted strokes (§4). The result ships as a
 plain grayscale PNG under `tips` in the brush document — the engine treats it
 exactly like an `.abr`-sampled tip, and export embeds it.

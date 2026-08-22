@@ -1,71 +1,71 @@
 {
-  "name": "scratched-metal",
-  "notes": "Worn metal as a dual-gated triple: one merged scratch history (55% near-linear, 45% deep-swirl strokes; heavy-tailed lengths, widths and depths) thresholded at 30/55/80% core coverage - the damage dial. Linear-only and swirl-only ancestors were merged on review: same material, different tools, one texture. Levels 30/55/80 = light/medium/heavy, calibrated to core-band stroke coverage by tools/fractal-tip.mjs --calibrate; verified by tools/spectrum-audit.mjs.",
-  "native": 1024,
-  "seed": 27007688,
-  "outDir": ".",
-  "field": {
-    "kind": "scratches",
-    "count": 2600,
-    "lenMin": 0.05,
-    "lenMax": 0.4,
-    "widthMin": 0.9,
-    "widthMax": 2.8,
-    "curvature": 0.015,
-    "swirlFraction": 0.45,
-    "curvatureSwirl": 1,
-    "depthMin": 0.15,
-    "depthPow": 2.2,
-    "fbmWeight": 0.05
+ "name": "scratched-metal",
+ "notes": "Worn metal as a dual-gated triple: one merged scratch history (55% near-linear, 45% deep-swirl strokes; heavy-tailed lengths, widths and depths) thresholded at 30/55/80% core coverage - the damage dial. Linear-only and swirl-only ancestors were merged on review: same material, different tools, one texture. Levels 30/55/80 = light/medium/heavy, calibrated to core-band stroke coverage by tools/fractal-tip.mjs --calibrate; verified by tools/spectrum-audit.mjs. REVISED to a tonal mask (maskMode tonal): the tip carries the tone-mapped field itself rather than a threshold cut, value-curve deconvolved by the mask train's overlap (v = 1-(depth*damage)^(1/n)); the level number is now the damage/modulation DEPTH, not coverage - moderate damage renders as moderate contrast over intact paint.",
+ "native": 1024,
+ "seed": 27007688,
+ "outDir": ".",
+ "field": {
+  "kind": "scratches",
+  "count": 2600,
+  "lenMin": 0.05,
+  "lenMax": 0.4,
+  "widthMin": 0.9,
+  "widthMax": 2.8,
+  "curvature": 0.015,
+  "swirlFraction": 0.45,
+  "curvatureSwirl": 1,
+  "depthMin": 0.15,
+  "depthPow": 2.2,
+  "fbmWeight": 0.05
+ },
+ "spectrum": {
+  "bandLoCyclesPerDia": 0.75,
+  "shoulderCyclesPerDia": 3,
+  "lowSlope": 1.5,
+  "beta": 2.2,
+  "kneeCyclesPerDia": 8,
+  "beta2": 3.5,
+  "cutCyclesPerDia": 45,
+  "taperCyclesPerDia": 55
+ },
+ "vignette": {
+  "inner": 0.84,
+  "rag": 0.18
+ },
+ "aaCanvasPx": 0.45,
+ "train": {
+  "size": 120,
+  "flow": 0.9,
+  "primary": {
+   "hardness": 0.85,
+   "spacing": 0.12,
+   "sizeJitter": 0.15,
+   "minDiameter": 0.45
   },
-  "spectrum": {
-    "bandLoCyclesPerDia": 0.75,
-    "shoulderCyclesPerDia": 3,
-    "lowSlope": 1.5,
-    "beta": 2.2,
-    "kneeCyclesPerDia": 8,
-    "beta2": 3.5,
-    "cutCyclesPerDia": 45,
-    "taperCyclesPerDia": 55
+  "dual": {
+   "sizeRatio": 1.3,
+   "spacing": 0.28,
+   "scatter": 0.7,
+   "count": 1
+  }
+ },
+ "levels": [
+  {
+   "coverage": 0.3,
+   "depth": 0.35
   },
-  "vignette": {
-    "inner": 0.8,
-    "rag": 0.22
+  {
+   "coverage": 0.55,
+   "depth": 0.6
   },
-  "aaCanvasPx": 0.45,
-  "train": {
-    "size": 120,
-    "flow": 0.9,
-    "primary": {
-      "hardness": 0.85,
-      "spacing": 0.12,
-      "sizeJitter": 0.15,
-      "minDiameter": 0.45
-    },
-    "dual": {
-      "sizeRatio": 1.3,
-      "spacing": 0.33,
-      "scatter": 0.7,
-      "count": 1
-    }
-  },
-  "levels": [
-    {
-      "coverage": 0.3,
-      "q": 0.0219
-    },
-    {
-      "coverage": 0.55,
-      "q": 0.0533
-    },
-    {
-      "coverage": 0.8,
-      "q": 0.2212,
-      "train": {
-        "dual": {
-          "spacing": 0.5
-        }
-      }
-    }
-  ]
+  {
+   "coverage": 0.8,
+   "depth": 0.85
+  }
+ ],
+ "maskMode": "tonal",
+ "tonal": {
+  "mode": "delta",
+  "invert": true
+ }
 }

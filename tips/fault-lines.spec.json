@@ -1,68 +1,67 @@
 {
-  "name": "fault-lines",
-  "notes": "Faulted stone as a dual-gated triple: 72 half-plane faults at full step (solid polygonal facets) with subtle ridge lines along the traces, fbm floor at 0.12. Converged from four variants: pure facets collapse into one mass at cut time, heavy lines read as streaks, 48 was bolder but poorer in angular vocabulary; canvas anchoring was considered and rejected in review - all these ship dual-gated. Levels 30/55/80 = light/medium/heavy, calibrated to core-band stroke coverage by tools/fractal-tip.mjs --calibrate; verified by tools/spectrum-audit.mjs.",
-  "native": 1024,
-  "seed": 24959857,
-  "outDir": ".",
-  "field": {
-    "kind": "faults",
-    "count": 72,
-    "stepAmp": 1,
-    "ampJitter": 0.7,
-    "lineWeight": 1.2,
-    "lineWidthMin": 1.2,
-    "lineWidthMax": 5,
-    "fbmWeight": 0.12,
-    "highpassK": 1.6
+ "name": "fault-lines",
+ "notes": "Faulted stone as a dual-gated triple: 72 half-plane faults at full step (solid polygonal facets) with subtle ridge lines along the traces, fbm floor at 0.12. Converged from four variants: pure facets collapse into one mass at cut time, heavy lines read as streaks, 48 was bolder but poorer in angular vocabulary; canvas anchoring was considered and rejected in review - all these ship dual-gated. Levels 30/55/80 = light/medium/heavy, calibrated to core-band stroke coverage by tools/fractal-tip.mjs --calibrate; verified by tools/spectrum-audit.mjs. REVISED to a tonal mask (maskMode tonal): the tip carries the tone-mapped field itself rather than a threshold cut, value-curve deconvolved by the mask train's overlap (v = 1-(depth*damage)^(1/n)); the level number is now the damage/modulation DEPTH, not coverage - moderate damage renders as moderate contrast over intact paint.",
+ "native": 1024,
+ "seed": 24959857,
+ "outDir": ".",
+ "field": {
+  "kind": "faults",
+  "count": 72,
+  "stepAmp": 1,
+  "ampJitter": 0.7,
+  "lineWeight": 1.2,
+  "lineWidthMin": 1.2,
+  "lineWidthMax": 5,
+  "fbmWeight": 0.12,
+  "highpassK": 1.6
+ },
+ "spectrum": {
+  "bandLoCyclesPerDia": 0.75,
+  "shoulderCyclesPerDia": 3,
+  "lowSlope": 1.5,
+  "beta": 2.2,
+  "kneeCyclesPerDia": 8,
+  "beta2": 3.5,
+  "cutCyclesPerDia": 45,
+  "taperCyclesPerDia": 55
+ },
+ "vignette": {
+  "inner": 0.84,
+  "rag": 0.18
+ },
+ "aaCanvasPx": 0.45,
+ "train": {
+  "size": 120,
+  "flow": 0.9,
+  "primary": {
+   "hardness": 0.85,
+   "spacing": 0.12,
+   "sizeJitter": 0.15,
+   "minDiameter": 0.45
   },
-  "spectrum": {
-    "bandLoCyclesPerDia": 0.75,
-    "shoulderCyclesPerDia": 3,
-    "lowSlope": 1.5,
-    "beta": 2.2,
-    "kneeCyclesPerDia": 8,
-    "beta2": 3.5,
-    "cutCyclesPerDia": 45,
-    "taperCyclesPerDia": 55
+  "dual": {
+   "sizeRatio": 1.3,
+   "spacing": 0.28,
+   "scatter": 0.7,
+   "count": 1
+  }
+ },
+ "levels": [
+  {
+   "coverage": 0.3,
+   "depth": 0.3
   },
-  "vignette": {
-    "inner": 0.8,
-    "rag": 0.22
+  {
+   "coverage": 0.55,
+   "depth": 0.55
   },
-  "aaCanvasPx": 0.45,
-  "train": {
-    "size": 120,
-    "flow": 0.9,
-    "primary": {
-      "hardness": 0.85,
-      "spacing": 0.12,
-      "sizeJitter": 0.15,
-      "minDiameter": 0.45
-    },
-    "dual": {
-      "sizeRatio": 1.3,
-      "spacing": 0.33,
-      "scatter": 0.7,
-      "count": 1
-    }
-  },
-  "levels": [
-    {
-      "coverage": 0.3,
-      "q": 0.0599
-    },
-    {
-      "coverage": 0.55,
-      "q": 0.2472
-    },
-    {
-      "coverage": 0.8,
-      "q": 0.6576,
-      "train": {
-        "dual": {
-          "spacing": 0.5
-        }
-      }
-    }
-  ]
+  {
+   "coverage": 0.8,
+   "depth": 0.8
+  }
+ ],
+ "maskMode": "tonal",
+ "tonal": {
+  "mode": "modulate"
+ }
 }
