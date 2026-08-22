@@ -918,20 +918,34 @@ const baseField =
 
 if (spec.output === 'pattern') {
   // A texture-channel pattern: tileable by FFT construction, no vignette,
-  // no threshold. Rank-equalize the field to a uniform histogram so the
-  // subtract-mode contact model (docs §9: inked where v > 1 − a) turns the
-  // pattern's value distribution into an identity — stroke coverage then
-  // tracks accumulated alpha directly, and the pressure curve is designed
-  // entirely in the brush document's flow mapping.
-  const order = Array.from(baseField.keys()).sort((i, j) => baseField[i] - baseField[j]);
-  const data = new Uint8Array(N * N);
-  for (let rank = 0; rank < order.length; rank++) {
-    data[order[rank]] = Math.round((rank / (order.length - 1)) * 255);
-  }
+  // no threshold. Default is rank-equalization to a uniform histogram so
+  // the subtract-mode contact model (docs §9: inked where v > 1 − a) turns
+  // the pattern's value distribution into an identity — stroke coverage
+  // then tracks accumulated alpha directly. A spec may instead ask for a
+  // soft linear tone (`tone.gain`, value ≈ 0.15–0.3): flatter contrast for
+  // patterns meant to read as gentle surface modulation.
+  const data = toneBytes(baseField);
   const out = join(outDir, `${spec.name}.png`);
   writeFileSync(out, encodeGrayPng(data, N, N));
   console.log(`  ${out}  (tileable pattern, equalized)  in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
   process.exit(0);
+}
+
+/** Field → bytes: rank-equalized by default, or soft linear via tone.gain. */
+function toneBytes(field) {
+  const data = new Uint8Array(N * N);
+  if (spec.tone?.gain) {
+    const g = spec.tone.gain;
+    for (let i = 0; i < field.length; i++) {
+      data[i] = Math.round(clamp(0.5 + g * field[i], 0, 1) * 255);
+    }
+    return data;
+  }
+  const order = Array.from(field.keys()).sort((i, j) => field[i] - field[j]);
+  for (let rank = 0; rank < order.length; rank++) {
+    data[order[rank]] = Math.round((rank / (order.length - 1)) * 255);
+  }
+  return data;
 }
 
 // --swatch a,b,c: exploration mode — write the continuous field plus flat
@@ -940,10 +954,7 @@ if (spec.output === 'pattern') {
 const swatchIdx = argv.indexOf('--swatch');
 if (swatchIdx >= 0) {
   const covs = argv[swatchIdx + 1].split(',').map((s) => Number(s.trim()));
-  const order = Array.from(baseField.keys()).sort((i, j) => baseField[i] - baseField[j]);
-  const eq = new Uint8Array(N * N);
-  for (let r = 0; r < order.length; r++) eq[order[r]] = Math.round((r / (order.length - 1)) * 255);
-  writeFileSync(join(outDir, `${spec.name}.field.png`), encodeGrayPng(eq, N, N));
+  writeFileSync(join(outDir, `${spec.name}.field.png`), encodeGrayPng(toneBytes(baseField), N, N));
   const sortedAll = Float64Array.from(baseField).sort();
   for (const pct of covs) {
     const t = sortedAll[clamp(Math.floor((1 - pct / 100) * sortedAll.length), 0, sortedAll.length - 1)];
