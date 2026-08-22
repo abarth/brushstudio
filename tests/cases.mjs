@@ -309,6 +309,90 @@ export async function runCases(BS, backend = 'cpu') {
     assert(written.issues.length === 0, written.issues.join('; '));
   });
 
+  await test('the descriptor has the shape of one Photoshop wrote', async () => {
+    // Transcribed from `inspect --dump 0` of a pack Photoshop itself wrote:
+    // a computed round brush, Shape Dynamics on, every other section off, and
+    // the options bar set. Types only — two brushes share no values — so what
+    // this pins is the schema: every key Photoshop writes, at the type it
+    // writes it, and nothing it does not write. It is the check that caught
+    // us omitting the five smoothing booleans and naming a computed tip.
+    const dyn = (name) => ({
+      [name]: 'Objc brVr',
+      [`${name}.bVTy`]: 'long',
+      [`${name}.fStp`]: 'long',
+      [`${name}.jitter`]: 'UntF #Prc',
+      [`${name}.Mnm`]: 'UntF #Prc',
+    });
+    const PHOTOSHOP = {
+      Nm: 'TEXT',
+      Brsh: 'Objc computedBrush',
+      'Brsh.Dmtr': 'UntF #Pxl',
+      'Brsh.Hrdn': 'UntF #Prc',
+      'Brsh.Angl': 'UntF #Ang',
+      'Brsh.Rndn': 'UntF #Prc',
+      'Brsh.Spcn': 'UntF #Prc',
+      'Brsh.Intr': 'bool',
+      'Brsh.flipX': 'bool',
+      'Brsh.flipY': 'bool',
+      useTipDynamics: 'bool',
+      flipX: 'bool',
+      flipY: 'bool',
+      brushProjection: 'bool',
+      minimumDiameter: 'UntF #Prc',
+      minimumRoundness: 'UntF #Prc',
+      tiltScale: 'UntF #Prc',
+      ...dyn('szVr'),
+      ...dyn('angleDynamics'),
+      ...dyn('roundnessDynamics'),
+      useScatter: 'bool',
+      dualBrush: 'Objc dualBrush',
+      'dualBrush.useDualBrush': 'bool',
+      brushGroup: 'Objc brushGroup',
+      'brushGroup.useBrushGroup': 'bool',
+      useTexture: 'bool',
+      usePaintDynamics: 'bool',
+      useColorDynamics: 'bool',
+      Wtdg: 'bool',
+      Nose: 'bool',
+      Rpt: 'bool',
+      useBrushSize: 'bool',
+      useBrushPose: 'bool',
+      toolOptions: 'Objc PbTl',
+      'toolOptions.brushPreset': 'bool',
+      'toolOptions.flow': 'long',
+      'toolOptions.Smoo': 'long',
+      'toolOptions.Md': 'enum',
+      'toolOptions.Opct': 'long',
+      'toolOptions.smoothing': 'bool',
+      'toolOptions.smoothingValue': 'doub',
+      'toolOptions.smoothingRadiusMode': 'bool',
+      'toolOptions.smoothingCatchup': 'bool',
+      'toolOptions.smoothingCatchupAtEnd': 'bool',
+      'toolOptions.smoothingZoomCompensation': 'bool',
+      'toolOptions.pressureSmoothing': 'bool',
+      'toolOptions.usePressureOverridesSize': 'bool',
+      'toolOptions.usePressureOverridesOpacity': 'bool',
+      'toolOptions.useLegacy': 'bool',
+    };
+
+    // the same brush: round tip, Shape Dynamics on, nothing else
+    const written = await BS.exportAbr([doc({
+      tip: { size: 175, hardness: 1, spacing: 0.05 },
+      shape: { enabled: true },
+      flow: 0.1,
+      opacity: 0.8,
+      smoothing: 0,
+    })], {});
+    const ours = BS.abrShape(written.abr);
+
+    const wrong = Object.keys(PHOTOSHOP)
+      .filter((k) => ours[k] !== PHOTOSHOP[k])
+      .map((k) => `${k}: Photoshop ${PHOTOSHOP[k]}, ours ${ours[k] ?? 'missing'}`);
+    const extra = Object.keys(ours).filter((k) => !(k in PHOTOSHOP));
+    assert(!wrong.length, wrong.join('; '));
+    assert(!extra.length, `keys Photoshop does not write: ${extra.join(', ')}`);
+  });
+
   await test('two descriptors can be held against each other by shape', async () => {
     // The one question a reader cannot answer about itself: a key at the
     // wrong type gets reported, but a key we never write looks exactly like

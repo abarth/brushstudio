@@ -388,7 +388,9 @@ function tipDescriptor(
     ['Hrdn', T.untf('#Prc', pct(hardness))],
     ['Angl', T.untf('#Ang', angle)],
     ['Rndn', T.untf('#Prc', pct(roundness))],
-    ['Nm  ', T.text(String(shape))],
+    // a computed tip carries no name in a real file — its class is what it
+    // is; a sampled one is named for the bitmap it stands on
+    ...(uuid ? [['Nm  ', T.text(String(shape))] as Entry] : []),
     ['Spcn', T.untf('#Prc', pct(spacing))],
     ['Intr', T.bool(true)],
     ['flipX', T.bool(flipX)],
@@ -517,8 +519,18 @@ function brushPreset(
       ['Smoo', T.long(pct(s.smoothing))],
       ['Md  ', T.enm('BlnM', PAINT_MODE_ENUM[s.blendMode] ?? 'Nrml')],
       ['Opct', T.long(pct(s.opacity))],
-      ['smoothing', T.bool(s.smoothing > 0)],
+      // 'smoothing' is on in a real file even where the amount is 0, and the
+      // five booleans after it are Photoshop's own defaults for the feature:
+      // pulled-string off, catch-up on, catch-up-at-end off, zoom
+      // compensation on, pressure smoothing off. They are inert at amount 0
+      // and give the stock behaviour above it.
+      ['smoothing', T.bool(true)],
       ['smoothingValue', T.doub(Math.round(s.smoothing * 255))],
+      ['smoothingRadiusMode', T.bool(false)],
+      ['smoothingCatchup', T.bool(true)],
+      ['smoothingCatchupAtEnd', T.bool(false)],
+      ['smoothingZoomCompensation', T.bool(true)],
+      ['pressureSmoothing', T.bool(false)],
       ['usePressureOverridesSize', T.bool(s.pressureSize)],
       ['usePressureOverridesOpacity', T.bool(s.pressureOpacity)],
       ['useLegacy', T.bool(false)],

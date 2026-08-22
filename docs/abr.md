@@ -89,7 +89,8 @@ rejects a tip at any other class with "unknown brush type".
 | `Hrdn` `Rndn` `Spcn` | `UntF #Prc` | hardness, roundness, spacing |
 | `Angl` | `UntF #Ang` | angle, in degrees |
 | `Intr` `flipX` `flipY` | `bool` | spacing on, and the tip's own flips |
-| `Nm  ` `sampledData` | `TEXT` | name, and the `samp` uuid on a sampled tip |
+| `sampledData` | `TEXT` | the `samp` uuid, on a sampled tip |
+| `Nm  ` | `TEXT` | a name — on a sampled tip only; a computed one carries none, its class being what it is |
 
 **The preset** — classed `brushPreset`, one per brush.
 
@@ -127,7 +128,10 @@ here; the Brush Settings panel's copies are what the engine paints from.
 What a pack puts in this descriptor otherwise varies by Photoshop version:
 of the two read so far, one carries the smoothing keys and no tool dynamics,
 the other carries the tool dynamics and no smoothing keys. Only `flow`,
-`Opct` and `Md  ` appear in both.
+`Opct` and `Md  ` appear in both. What we write matches the newer of the two,
+key for key — `tests/cases.mjs` holds that whole shape as a fixture
+transcribed from a `--dump` of it, so the schema cannot drift from a file
+Photoshop wrote without a test saying so.
 
 | key | type | is | evidence |
 | --- | --- | --- | --- |
@@ -135,7 +139,8 @@ the other carries the tool dynamics and no smoothing keys. Only `flow`,
 | `flow` | `long` | Flow, 0..100 | `getInteger(stringIDToTypeID('flow'))` |
 | `Smoo` | `long` | Smoothing amount, 0..100 | `putInteger(stringIDToTypeID('smooth'), n)` |
 | `smoothingValue` | `doub` | the same amount over 255 | `putDouble(…'smoothingValue', n / 100 * 255)` |
-| `smoothing` | `bool` | smoothing on | |
+| `smoothing` | `bool` | smoothing on — `true` in a real file even at amount 0 | |
+| `smoothingRadiusMode` `smoothingCatchup` `smoothingCatchupAtEnd` `smoothingZoomCompensation` `pressureSmoothing` | `bool` | the CC2018 smoothing refinements; written at Photoshop's own defaults | |
 | `Md  ` | `enum` `BlnM` | paint blend mode | |
 | `usePressureOverridesSize` / `…Opacity` | `bool` | the pressure override buttons | |
 

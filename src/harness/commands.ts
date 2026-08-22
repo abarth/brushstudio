@@ -223,6 +223,12 @@ function pickBrush(abr: string | Uint8Array | ArrayBuffer, want?: number | strin
   return { index, brush: parsed.brushes[index] };
 }
 
+/** One brush's descriptor shape: every key path mapped to its type. */
+export function abrShape(abr: string | Uint8Array | ArrayBuffer, want?: number | string) {
+  const { brush } = pickBrush(abr, want);
+  return brush.raw ? descriptorShape(brush.raw) : {};
+}
+
 /**
  * Holds one brush's descriptor against another's and reports the difference
  * in shape: keys one file has and the other does not, and keys they share at

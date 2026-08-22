@@ -982,7 +982,7 @@ export function dumpDescriptor(d: Descriptor, indent = ''): string[] {
         out.push(`${pad}${key}: ${v.osType}`);
         break;
       default:
-        out.push(`${pad}${key}: ${v.t} ${JSON.stringify(v.v)}`);
+        out.push(`${pad}${key}: ${typeName(v)} ${JSON.stringify(v.v)}`);
     }
   }
   return out;
