@@ -60,7 +60,9 @@ patch**. Their fiddling comes back as JSON that drops straight into the
 brush document, instead of a description that has to be re-guessed. The
 panel lists every document in `brushes/`, shows the bitmap sitting in each
 tip and texture slot beside the picker that swaps it, and collapses the
-sections that are switched off.
+sections that are switched off. It reaches every field the engine has — the
+Control behind each jitter, both texture blend modes, the two colours Color
+Dynamics works between — and `npm test` fails if one of them falls off.
 
 ## Commands
 

@@ -1,7 +1,15 @@
 import type { PointerSample } from '../src/brush/dynamics';
 import { engineStrokeParams } from '../src/brush/engineParams';
 import { getPattern, getTip } from '../src/brush/patterns';
-import { PATTERNS, TIP_SHAPES, type BrushPatch, type BrushSettings } from '../src/brush/types';
+import {
+  PATTERNS,
+  TIP_SHAPES,
+  type BrushPatch,
+  type BrushSettings,
+  type ControlSource,
+  type DynamicControl,
+} from '../src/brush/types';
+import { hexToRgb, hsvToRgb, rgbToHex, rgbToHsv } from '../src/color/convert';
 // the scalar twin of the shader's `texValue`, so the texture swatch shows the
 // same brightness/contrast/invert the stroke will be carved with
 import { texValue } from '../src/engine/cpu/blend';
@@ -9,7 +17,8 @@ import { PaintEngine } from '../src/gpu/engine';
 import { StrokeSession } from '../src/gpu/stroke';
 import { resolveBrush, type AssetBag, type BrushDoc } from '../src/harness/brushDoc';
 import { diffFromDefaults } from '../src/harness/patch';
-import { makeLayerMeta, type LayerMeta } from '../src/types';
+import { makeLayerMeta, type HSV, type LayerMeta } from '../src/types';
+import { BLEND_CHOICES, CONTROL_CHOICES, GROUPS, type Item, type Path } from './groups';
 import { drawSwatch } from './swatch';
 
 /**
@@ -22,9 +31,10 @@ import { drawSwatch } from './swatch';
  * being described in prose and re-guessed.
  *
  * The panel is built for someone who already knows the engine: no prose, no
- * controls for sections that are switched off, and the tip and texture
- * bitmaps shown as pictures, because "fiber-drag" and "wisp-filament" are two
- * words until you have seen them.
+ * controls for sections that are switched off, the tip and texture bitmaps
+ * shown as pictures, and every field of `BrushSettings` reachable. A knob the
+ * engine has and the app does not is a knob that gets tuned by editing JSON
+ * and re-rendering, which is the slow path this app exists to avoid.
  */
 
 /**
@@ -40,6 +50,12 @@ const DARK_PAPER: [number, number, number, number] = [0.11, 0.107, 0.115, 1];
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>('canvas');
 
+function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = ''): HTMLElementTagNameMap[K] {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  return node;
+}
+
 let statusTimer = 0;
 
 /**
@@ -48,11 +64,11 @@ let statusTimer = 0;
  * the other.
  */
 function setStatus(text: string, ms = 3000): void {
-  const el = $('status');
-  el.textContent = text;
-  el.classList.toggle('on', text !== '');
+  const node = $('status');
+  node.textContent = text;
+  node.classList.toggle('on', text !== '');
   clearTimeout(statusTimer);
-  if (text && ms > 0) statusTimer = window.setTimeout(() => el.classList.remove('on'), ms);
+  if (text && ms > 0) statusTimer = window.setTimeout(() => node.classList.remove('on'), ms);
 }
 
 // ---------------------------------------------------------------------------
@@ -103,22 +119,19 @@ function renderLibrary(): void {
   const list = $('brushes');
   list.textContent = '';
   if (shown.length === 0) {
-    const empty = document.createElement('li');
-    empty.className = 'empty';
+    const empty = el('li', 'empty');
     empty.textContent = 'no match';
     list.append(empty);
     return;
   }
   for (const entry of shown) {
-    const row = document.createElement('li');
-    row.className = entry.path === current ? 'on' : '';
+    const row = el('li', entry.path === current ? 'on' : '');
     if (entry.notes) row.title = entry.notes;
-    const name = document.createElement('span');
+    const name = el('span');
     name.textContent = entry.name;
     row.append(name);
     if (entry.folder) {
-      const where = document.createElement('span');
-      where.className = 'where';
+      const where = el('span', 'where');
       where.textContent = entry.folder;
       row.append(where);
     }
@@ -159,6 +172,17 @@ let engine: PaintEngine;
 let settings: BrushSettings;
 let session: StrokeSession | null = null;
 let dark = false;
+let erasing = false;
+
+const hex = (c: HSV) => `#${rgbToHex(hsvToRgb(c))}`;
+const toHsv = (value: string) => rgbToHsv(hexToRgb(value) ?? { r: 0, g: 0, b: 0 });
+
+/**
+ * The paint. Not part of a brush document — a brush is a mark, not a colour —
+ * but Color Dynamics blends between these two and jitters around them, so a
+ * panel that cannot set them cannot show what that whole section does.
+ */
+const ink = { fg: hex({ h: 24, s: 0.62, v: 0.2 }), bg: hex({ h: 38, s: 0.28, v: 0.9 }) };
 
 const view = { zoom: 1, panX: 0, panY: 0 };
 const state = () => ({ layers: [layer], activeLayerId: layer.id, view });
@@ -208,11 +232,8 @@ function toSample(e: PointerEvent): PointerSample {
 
 canvas.addEventListener('pointerdown', (e) => {
   canvas.setPointerCapture(e.pointerId);
-  engine.beginStroke(engineStrokeParams(settings, 'paint'));
-  session = new StrokeSession(engine, settings, {
-    fg: dark ? { h: 40, s: 0.08, v: 0.96 } : { h: 24, s: 0.62, v: 0.2 },
-    bg: dark ? { h: 24, s: 0.62, v: 0.2 } : { h: 38, s: 0.28, v: 0.9 },
-  });
+  engine.beginStroke(engineStrokeParams(settings, erasing ? 'erase' : 'paint'));
+  session = new StrokeSession(engine, settings, { fg: toHsv(ink.fg), bg: toHsv(ink.bg) });
   session.down(toSample(e));
   draw();
 });
@@ -240,132 +261,7 @@ window.addEventListener('resize', draw);
 // controls
 // ---------------------------------------------------------------------------
 
-type Path = [keyof BrushSettings, string?];
 type Value = number | boolean | string;
-
-interface Slider {
-  label: string;
-  path: Path;
-  min: number;
-  max: number;
-  step: number;
-  /** shown as a percentage rather than a raw number */
-  pct?: boolean;
-}
-
-/** A bitmap slot: which tip or pattern the section is stamping. */
-interface Bitmap {
-  path: Path;
-  kind: 'tip' | 'pattern';
-}
-
-interface Group {
-  title: string;
-  /** the section's `enabled` flag, when it has one */
-  toggle?: keyof BrushSettings;
-  bitmap?: Bitmap;
-  sliders: Slider[];
-  checks?: { label: string; path: Path }[];
-}
-
-const GROUPS: Group[] = [
-  {
-    title: 'tip',
-    bitmap: { path: ['tip', 'shape'], kind: 'tip' },
-    sliders: [
-      { label: 'size', path: ['tip', 'size'], min: 1, max: 600, step: 1 },
-      { label: 'hardness', path: ['tip', 'hardness'], min: 0, max: 1, step: 0.01, pct: true },
-      { label: 'spacing', path: ['tip', 'spacing'], min: 0.01, max: 2, step: 0.01, pct: true },
-      { label: 'roundness', path: ['tip', 'roundness'], min: 0.05, max: 1, step: 0.01, pct: true },
-      { label: 'angle', path: ['tip', 'angle'], min: -180, max: 180, step: 1 },
-    ],
-    checks: [
-      { label: 'flip X', path: ['tip', 'flipX'] },
-      { label: 'flip Y', path: ['tip', 'flipY'] },
-    ],
-  },
-  {
-    title: 'stroke',
-    sliders: [
-      { label: 'flow', path: ['flow'], min: 0, max: 1, step: 0.01, pct: true },
-      { label: 'opacity', path: ['opacity'], min: 0, max: 1, step: 0.01, pct: true },
-      { label: 'smoothing', path: ['smoothing'], min: 0, max: 0.95, step: 0.01, pct: true },
-    ],
-    checks: [
-      { label: 'wet edges', path: ['wetEdges'] },
-      { label: 'noise', path: ['noise'] },
-      { label: 'build-up', path: ['airbrush'] },
-    ],
-  },
-  {
-    title: 'shape dynamics',
-    toggle: 'shape',
-    sliders: [
-      { label: 'size jitter', path: ['shape', 'sizeJitter'], min: 0, max: 1, step: 0.01, pct: true },
-      { label: 'min diameter', path: ['shape', 'minDiameter'], min: 0, max: 1, step: 0.01, pct: true },
-      { label: 'angle jitter', path: ['shape', 'angleJitter'], min: 0, max: 1, step: 0.01, pct: true },
-      { label: 'round jitter', path: ['shape', 'roundnessJitter'], min: 0, max: 1, step: 0.01, pct: true },
-    ],
-  },
-  {
-    title: 'scattering',
-    toggle: 'scatter',
-    sliders: [
-      { label: 'scatter', path: ['scatter', 'scatter'], min: 0, max: 10, step: 0.05, pct: true },
-      { label: 'count', path: ['scatter', 'count'], min: 1, max: 16, step: 1 },
-      { label: 'count jitter', path: ['scatter', 'countJitter'], min: 0, max: 1, step: 0.01, pct: true },
-    ],
-    checks: [{ label: 'both axes', path: ['scatter', 'bothAxes'] }],
-  },
-  {
-    title: 'texture',
-    toggle: 'texture',
-    bitmap: { path: ['texture', 'pattern'], kind: 'pattern' },
-    sliders: [
-      { label: 'depth', path: ['texture', 'depth'], min: 0, max: 1, step: 0.01, pct: true },
-      { label: 'scale', path: ['texture', 'scale'], min: 0.1, max: 4, step: 0.05, pct: true },
-      { label: 'contrast', path: ['texture', 'contrast'], min: -1, max: 1, step: 0.01, pct: true },
-      { label: 'brightness', path: ['texture', 'brightness'], min: -1, max: 1, step: 0.01, pct: true },
-    ],
-    checks: [
-      { label: 'invert', path: ['texture', 'invert'] },
-      { label: 'each tip', path: ['texture', 'textureEachTip'] },
-    ],
-  },
-  {
-    title: 'dual brush',
-    toggle: 'dual',
-    bitmap: { path: ['dual', 'shape'], kind: 'tip' },
-    sliders: [
-      { label: 'size', path: ['dual', 'size'], min: 1, max: 600, step: 1 },
-      { label: 'spacing', path: ['dual', 'spacing'], min: 0.01, max: 2, step: 0.01, pct: true },
-      { label: 'scatter', path: ['dual', 'scatter'], min: 0, max: 10, step: 0.05, pct: true },
-      { label: 'count', path: ['dual', 'count'], min: 1, max: 16, step: 1 },
-    ],
-    checks: [{ label: 'both axes', path: ['dual', 'bothAxes'] }],
-  },
-  {
-    title: 'transfer',
-    toggle: 'transfer',
-    sliders: [
-      { label: 'opacity jit', path: ['transfer', 'opacityJitter'], min: 0, max: 1, step: 0.01, pct: true },
-      { label: 'opacity min', path: ['transfer', 'opacityMin'], min: 0, max: 1, step: 0.01, pct: true },
-      { label: 'flow jitter', path: ['transfer', 'flowJitter'], min: 0, max: 1, step: 0.01, pct: true },
-      { label: 'flow min', path: ['transfer', 'flowMin'], min: 0, max: 1, step: 0.01, pct: true },
-    ],
-  },
-  {
-    title: 'color dynamics',
-    toggle: 'color',
-    sliders: [
-      { label: 'fg/bg jitter', path: ['color', 'fgBgJitter'], min: 0, max: 1, step: 0.01, pct: true },
-      { label: 'hue jitter', path: ['color', 'hueJitter'], min: 0, max: 1, step: 0.01, pct: true },
-      { label: 'sat jitter', path: ['color', 'satJitter'], min: 0, max: 1, step: 0.01, pct: true },
-      { label: 'bri jitter', path: ['color', 'briJitter'], min: 0, max: 1, step: 0.01, pct: true },
-    ],
-    checks: [{ label: 'per tip', path: ['color', 'applyPerTip'] }],
-  },
-];
 
 function getAt(path: Path): Value {
   const [section, key] = path;
@@ -383,6 +279,12 @@ function setAt(path: Path, value: Value): void {
   }
 }
 
+/** A `DynamicControl` is the one settings value that is an object. */
+function controlAt(path: Path): DynamicControl {
+  const [section, key] = path;
+  return (settings[section] as unknown as Record<string, DynamicControl>)[key!];
+}
+
 /**
  * The bitmaps the current document declares: `@name` against the id the
  * engine registered it under. Documents name their own tips and patterns, so
@@ -394,66 +296,204 @@ let docPatterns: [string, string][] = [];
 /** engine id -> the document's name for it, the reverse of the two above */
 let aliasBack = new Map<string, string>();
 
-/** Redraws for the swatches on screen, run whenever a control moves. */
-let repaint: (() => void)[] = [];
+/**
+ * One closure per row, run after any change. Rows read their value back out
+ * of the settings rather than trusting what they last wrote, so a control
+ * whose state depends on another — a hardness that only the round tip uses —
+ * is right without every row having to know who might move it.
+ */
+let refresh: (() => void)[] = [];
 
-function fillOptions(select: HTMLSelectElement, kind: 'tip' | 'pattern', value: string): void {
-  const declared = kind === 'tip' ? docTips : docPatterns;
-  const builtin = kind === 'tip' ? TIP_SHAPES : PATTERNS;
+const inertly = (row: HTMLElement, item: Item) => {
+  if (!('inert' in item) || !item.inert) return;
+  // dimmed, not disabled: the value is still the brush's, and worth setting
+  // before flipping the switch that gives it teeth
+  row.classList.toggle('inert', item.inert(settings));
+};
+
+function fillOptions(
+  select: HTMLSelectElement,
+  options: readonly { id: string; label: string }[],
+  value: string,
+  declared: [string, string][] = [],
+): void {
   const add = (parent: HTMLElement, id: string, label: string) => {
-    const option = document.createElement('option');
+    const option = el('option');
     option.value = id;
     option.textContent = label;
     parent.append(option);
   };
-  // an id the lists do not cover — a bitmap left over from another document —
+  // an id neither list covers — a bitmap left over from another document —
   // still has to show, or the picker would quietly misreport the brush
-  if (value && !declared.some(([, id]) => id === value) && !builtin.some((b) => b.id === value)) {
+  if (value && !declared.some(([, id]) => id === value) && !options.some((o) => o.id === value)) {
     add(select, value, value);
   }
   if (declared.length) {
-    const group = document.createElement('optgroup');
-    group.label = 'this brush';
-    for (const [name, id] of declared) add(group, id, `@${name}`);
-    select.append(group);
+    const mine = el('optgroup');
+    mine.label = 'this brush';
+    for (const [name, id] of declared) add(mine, id, `@${name}`);
+    const builtin = el('optgroup');
+    builtin.label = 'built-in';
+    for (const option of options) add(builtin, option.id, option.label);
+    select.append(mine, builtin);
+  } else {
+    for (const option of options) add(select, option.id, option.label);
   }
-  const group = document.createElement('optgroup');
-  group.label = 'built-in';
-  for (const item of builtin) add(group, String(item.id), item.label);
-  select.append(group);
   select.value = value;
 }
 
-/** The bitmap in a slot, beside the picker that changes it. */
-function bitmapRow(spec: Bitmap): HTMLElement {
-  const row = document.createElement('div');
-  row.className = 'bitmap';
-  const swatch = document.createElement('canvas');
-  const side = document.createElement('div');
-  const select = document.createElement('select');
-  const meta = document.createElement('div');
-  meta.className = 'meta';
+// --- the rows -------------------------------------------------------------
 
-  fillOptions(select, spec.kind, String(getAt(spec.path)));
-  select.addEventListener('input', () => {
-    setAt(spec.path, select.value);
-    showPatch();
+function sliderRow(item: Item & { row: 'slider' }): HTMLElement {
+  const row = el('div', 'row');
+  const label = el('label');
+  label.textContent = item.label;
+  const input = el('input');
+  input.type = 'range';
+  input.min = String(item.min);
+  input.max = String(item.max);
+  input.step = String(item.step);
+  const out = el('output');
+  // the readout comes from the setting, not from the slider: a borrowed .abr
+  // can carry a size past the end of the track, and a clamped number on
+  // screen would be a lie about the brush
+  const show = (v: number) => {
+    out.textContent = item.pct ? `${Math.round(v * 100)}%` : String(Math.round(v * 100) / 100);
+  };
+  input.addEventListener('input', () => {
+    const v = Number(input.value);
+    setAt(item.path, v);
+    show(v);
+    onChange();
   });
+  refresh.push(() => {
+    const v = Number(getAt(item.path));
+    if (input.value !== String(v)) input.value = String(v);
+    show(v);
+    inertly(row, item);
+  });
+  row.append(label, input, out);
+  return row;
+}
+
+function checkRow(item: Item & { row: 'check' }): HTMLElement {
+  const row = el('label', 'check');
+  const input = el('input');
+  input.type = 'checkbox';
+  input.addEventListener('input', () => {
+    setAt(item.path, input.checked);
+    onChange();
+  });
+  refresh.push(() => {
+    input.checked = !!getAt(item.path);
+    inertly(row, item);
+  });
+  row.append(input, document.createTextNode(` ${item.label}`));
+  return row;
+}
+
+function choiceRow(item: Item & { row: 'choice' }): HTMLElement {
+  const row = el('div', 'row wide');
+  const label = el('label');
+  label.textContent = item.label;
+  const select = el('select');
+  fillOptions(select, item.options, String(getAt(item.path)));
+  select.addEventListener('input', () => {
+    setAt(item.path, select.value);
+    onChange();
+  });
+  refresh.push(() => {
+    const v = String(getAt(item.path));
+    if (select.value !== v) select.value = v;
+    inertly(row, item);
+  });
+  row.append(label, select);
+  return row;
+}
+
+/** What drives the value above it, and — for Fade — over how many steps. */
+function controlRow(item: Item & { row: 'control' }): HTMLElement {
+  const row = el('div', 'row sub');
+  const label = el('label');
+  label.textContent = item.label;
+  const select = el('select');
+  fillOptions(select, CONTROL_CHOICES, controlAt(item.path).source);
+  const steps = el('input');
+  steps.type = 'number';
+  steps.min = '1';
+  steps.max = '999';
+  steps.title = 'fade length, in spacing steps';
+  select.addEventListener('input', () => {
+    controlAt(item.path).source = select.value as ControlSource;
+    onChange();
+  });
+  steps.addEventListener('input', () => {
+    controlAt(item.path).fadeSteps = Math.max(1, Math.round(Number(steps.value) || 1));
+    onChange();
+  });
+  refresh.push(() => {
+    const ctrl = controlAt(item.path);
+    if (select.value !== ctrl.source) select.value = ctrl.source;
+    if (steps.value !== String(ctrl.fadeSteps)) steps.value = String(ctrl.fadeSteps);
+    // hidden rather than removed, so the row does not change shape as the
+    // source is cycled past Fade
+    steps.classList.toggle('gone', ctrl.source !== 'fade');
+    inertly(row, item);
+  });
+  row.append(label, select, steps);
+  return row;
+}
+
+/** The bitmap in a slot, the picker that changes it, and how it combines. */
+function bitmapRow(item: Item & { row: 'bitmap' }): HTMLElement {
+  const row = el('div', 'bitmap');
+  const swatch = el('canvas');
+  const side = el('div');
+  const select = el('select');
+  const meta = el('div', 'meta');
+  const isTip = item.of === 'tip';
+
+  fillOptions(
+    select,
+    isTip ? TIP_SHAPES : PATTERNS,
+    String(getAt(item.path)),
+    isTip ? docTips : docPatterns,
+  );
+  select.addEventListener('input', () => {
+    setAt(item.path, select.value);
+    onChange();
+  });
+  side.append(select, meta);
+
+  if (item.mode) {
+    const mode = el('label', 'mode');
+    const caption = el('span');
+    caption.textContent = 'mode';
+    const pick = el('select');
+    fillOptions(pick, BLEND_CHOICES, String(getAt(item.mode)));
+    pick.addEventListener('input', () => {
+      setAt(item.mode!, pick.value);
+      onChange();
+    });
+    refresh.push(() => {
+      const v = String(getAt(item.mode!));
+      if (pick.value !== v) pick.value = v;
+    });
+    mode.append(caption, pick);
+    side.append(mode);
+  }
 
   let drawn = '';
-  const paint = () => {
-    const id = String(getAt(spec.path));
+  refresh.push(() => {
+    const id = String(getAt(item.path));
     const tex = settings.texture;
     // a swatch is a few hundred thousand pixels; only redraw one whose
     // picture has actually changed, so dragging a slider stays cheap
-    const key =
-      spec.kind === 'tip'
-        ? id
-        : [id, tex.brightness, tex.contrast, tex.invert, tex.scale].join('|');
+    const key = isTip ? id : [id, tex.brightness, tex.contrast, tex.invert, tex.scale].join('|');
     if (key === drawn) return;
     drawn = key;
     if (select.value !== id) select.value = id;
-    if (spec.kind === 'tip') {
+    if (isTip) {
       const map = getTip(id);
       drawSwatch(swatch, map);
       // the round tip is analytic — the engine samples no bitmap for it, and
@@ -472,85 +512,80 @@ function bitmapRow(spec: Bitmap): HTMLElement {
       // tile it lands on the canvas at, against the tip diameter
       meta.textContent = `${map.size}px tile → ${Math.round(map.size * tex.scale)}px`;
     }
-  };
-  paint();
-  repaint.push(paint);
+  });
 
-  side.append(select, meta);
   row.append(swatch, side);
   return row;
+}
+
+/** Foreground and background — the two colours Color Dynamics works between. */
+function paintRow(): HTMLElement {
+  const row = el('div', 'row paint');
+  const label = el('label');
+  label.textContent = 'fg / bg';
+  const pair = el('div', 'pair');
+  const wells = (['fg', 'bg'] as const).map((which) => {
+    const well = el('input');
+    well.type = 'color';
+    well.title = which === 'fg' ? 'foreground' : 'background';
+    well.addEventListener('input', () => {
+      ink[which] = well.value;
+    });
+    pair.append(well);
+    return [which, well] as const;
+  });
+  const swap = el('button');
+  swap.textContent = '⇄';
+  swap.title = 'swap foreground and background';
+  swap.addEventListener('click', () => {
+    [ink.fg, ink.bg] = [ink.bg, ink.fg];
+    onChange();
+  });
+  refresh.push(() => {
+    for (const [which, well] of wells) if (well.value !== ink[which]) well.value = ink[which];
+  });
+  row.append(label, pair, swap);
+  return row;
+}
+
+function buildRow(item: Item): HTMLElement {
+  switch (item.row) {
+    case 'slider': return sliderRow(item);
+    case 'check': return checkRow(item);
+    case 'choice': return choiceRow(item);
+    case 'control': return controlRow(item);
+    case 'bitmap': return bitmapRow(item);
+    case 'paint': return paintRow();
+  }
 }
 
 function buildControls(): void {
   const host = $('controls');
   host.textContent = '';
-  repaint = [];
+  refresh = [];
   for (const group of GROUPS) {
-    const box = document.createElement('div');
-    box.className = 'group';
-    const head = document.createElement('h2');
+    const box = el('div', 'group');
+    const head = el('h2');
     head.textContent = group.title;
-    const body = document.createElement('div');
-    body.className = 'body';
+    const body = el('div', 'body');
 
     if (group.toggle) {
       const flag = () => settings[group.toggle!] as { enabled: boolean };
-      const on = document.createElement('input');
+      const on = el('input');
       on.type = 'checkbox';
       on.checked = !!flag().enabled;
-      // a section that is off is collapsed to its switch: its sliders reach
+      // a section that is off is collapsed to its switch: its controls reach
       // nothing, and reading them as if they did is the confusing part
       box.classList.toggle('off', !on.checked);
       on.addEventListener('input', () => {
         flag().enabled = on.checked;
         box.classList.toggle('off', !on.checked);
-        showPatch();
+        onChange();
       });
       head.prepend(on);
     }
     box.append(head, body);
-
-    if (group.bitmap) body.append(bitmapRow(group.bitmap));
-
-    for (const slider of group.sliders) {
-      const row = document.createElement('div');
-      row.className = 'row';
-      const label = document.createElement('label');
-      label.textContent = slider.label;
-      const input = document.createElement('input');
-      input.type = 'range';
-      input.min = String(slider.min);
-      input.max = String(slider.max);
-      input.step = String(slider.step);
-      input.value = String(getAt(slider.path));
-      const out = document.createElement('output');
-      const show = () => {
-        const v = Number(input.value);
-        out.textContent = slider.pct ? `${Math.round(v * 100)}%` : String(Math.round(v * 100) / 100);
-      };
-      show();
-      input.addEventListener('input', () => {
-        setAt(slider.path, Number(input.value));
-        show();
-        showPatch();
-      });
-      row.append(label, input, out);
-      body.append(row);
-    }
-
-    for (const check of group.checks ?? []) {
-      const row = document.createElement('label');
-      row.className = 'check';
-      const input = document.createElement('input');
-      input.type = 'checkbox';
-      input.checked = !!getAt(check.path);
-      input.addEventListener('input', () => {
-        setAt(check.path, input.checked);
-        showPatch();
-      });
-      row.append(input, document.createTextNode(` ${check.label}`));
-      body.append(row, document.createElement('br'));
-    }
+    for (const item of group.items) body.append(buildRow(item));
     host.append(box);
   }
 }
@@ -575,8 +610,9 @@ function reAlias(patch: BrushPatch): BrushPatch {
   return patch;
 }
 
-function showPatch(): void {
-  for (const paint of repaint) paint();
+/** Every control ends here: re-read the panel, re-emit the patch. */
+function onChange(): void {
+  for (const run of refresh) run();
   $('patch').textContent = JSON.stringify(reAlias(diffFromDefaults(settings)), null, 2);
 }
 
@@ -596,7 +632,7 @@ async function selectBrush(path: string): Promise<void> {
     current = path;
     renderLibrary();
     buildControls();
-    showPatch();
+    onChange();
     setStatus(resolved.warnings.join(' · '), 6000);
   } catch (err) {
     setStatus(`${docModules[path]?.name ?? path}: ${(err as Error).message}`, 0);
@@ -637,7 +673,7 @@ search.addEventListener('keydown', (e) => {
 
 const menu = $<HTMLDetailsElement>('menu');
 menu.addEventListener('click', (e) => {
-  // a command is a one-shot; only the ground toggle is worth staying open for
+  // a command is a one-shot; the toggles are worth staying open for
   if ((e.target as HTMLElement).tagName === 'BUTTON') menu.open = false;
 });
 document.addEventListener('pointerdown', (e) => {
@@ -645,8 +681,16 @@ document.addEventListener('pointerdown', (e) => {
 });
 
 $('clear').addEventListener('click', clear);
+$('erase').addEventListener('input', (e) => {
+  erasing = (e.target as HTMLInputElement).checked;
+  canvas.classList.toggle('erasing', erasing);
+});
 $('dark').addEventListener('input', (e) => {
   dark = (e.target as HTMLInputElement).checked;
+  // the ground and the paint change together, so a dark page does not get
+  // painted in ink chosen to sit on a pale one
+  [ink.fg, ink.bg] = [ink.bg, ink.fg];
+  onChange();
   clear();
 });
 $('save').addEventListener('click', async () => {
@@ -660,11 +704,11 @@ $('save').addEventListener('click', async () => {
     img.data[i * 4 + 2] = Math.min(255, data[i * 4 + 2] * inv);
     img.data[i * 4 + 3] = a;
   }
-  const out = document.createElement('canvas');
+  const out = el('canvas');
   out.width = DOC.width;
   out.height = DOC.height;
   out.getContext('2d')!.putImageData(img, 0, 0);
-  const link = document.createElement('a');
+  const link = el('a');
   link.href = out.toDataURL('image/png');
   link.download = 'brushstudio.png';
   link.click();

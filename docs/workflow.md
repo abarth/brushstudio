@@ -114,6 +114,12 @@ the picker that swaps it, so trying `fiber-drag` against `wisp-filament` is a
 click rather than a round trip — and a bitmap the document declared comes
 back in the patch under the `@name` the document gave it.
 
+Nothing in the engine is out of the app's reach: every jitter's Control, the
+fade length behind it, both texture blend modes, the stroke's own blend mode
+and the two colours Color Dynamics works between are all on the panel. A
+hunch about a brush can be tried under the hand before it is written down,
+which is the whole point of the step.
+
 ## 7. Revise
 
 Change **one or two** parameters per iteration and re-measure. The

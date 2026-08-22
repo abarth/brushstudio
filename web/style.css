@@ -63,6 +63,7 @@ h1 { font-size: 13px; margin: 0; letter-spacing: 0.04em; color: var(--accent); f
 
 main { flex: 1; display: flex; min-height: 0; position: relative; }
 canvas { flex: 1; min-width: 0; touch-action: none; display: block; cursor: crosshair; }
+canvas.erasing { cursor: cell; }
 
 /* --- transient messages float over the canvas, so they never move the layout --- */
 #status {
@@ -86,7 +87,7 @@ canvas { flex: 1; min-width: 0; touch-action: none; display: block; cursor: cros
 
 /* --- side panel: three bounded regions, each scrolling on its own --- */
 aside {
-  width: 328px;
+  width: 344px;
   flex: none;
   border-left: 1px solid var(--line);
   background: var(--panel);
@@ -152,12 +153,39 @@ input[type='search']::-webkit-search-cancel-button { filter: grayscale(1) opacit
    that do not reach the mark are noise */
 .group.off > h2 { margin: 0; }
 .group.off > .body { display: none; }
-.row { display: grid; grid-template-columns: 92px 1fr 46px; align-items: center; gap: 8px; margin: 3px 0; }
+.row { display: grid; grid-template-columns: 104px 1fr 46px; align-items: center; gap: 8px; margin: 3px 0; }
 .row label { color: var(--dim); }
 .row output { text-align: right; font-variant-numeric: tabular-nums; }
 input[type='range'], input[type='checkbox'] { accent-color: var(--accent); }
 input[type='range'] { width: 100%; }
 .check { display: inline-flex; align-items: center; gap: 4px; color: var(--dim); }
+#controls .check { display: flex; margin: 4px 0; }
+
+/* a select that has no number beside it takes the readout column too */
+.row.wide select { grid-column: 2 / 4; width: 100%; }
+/* the Control under the jitter it drives, indented to say so */
+.row.sub label { padding-left: 12px; }
+#controls input[type='number'] { width: 100%; text-align: right; -moz-appearance: textfield; }
+#controls input[type='number']::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+/* the fade length only Fade reads — hidden, not removed, so cycling the
+   source past Fade does not change the row's shape */
+#controls .gone { visibility: hidden; }
+/* a control the engine is currently ignoring: dim, but still yours to set */
+#controls .inert { opacity: 0.42; }
+
+/* the two colours Color Dynamics works between */
+.row.paint .pair { display: flex; gap: 6px; min-width: 0; }
+.row.paint input[type='color'] {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 1px;
+  background: #2a2a2e;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.row.paint button { padding: 2px 0; }
 
 /* the bitmap in a tip or texture slot, beside the picker that changes it */
 .bitmap { display: grid; grid-template-columns: 96px 1fr; gap: 9px; align-items: start; margin: 2px 0 9px; }
@@ -172,6 +200,15 @@ input[type='range'] { width: 100%; }
   margin-top: 5px;
   color: var(--dim);
   font: 11px ui-monospace, Menlo, monospace;
+}
+/* how the bitmap combines with the stroke, under the picker that chose it */
+.bitmap .mode {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--dim);
 }
 
 /* patch */

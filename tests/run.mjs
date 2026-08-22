@@ -11,6 +11,7 @@
  *   npm test -- --backend gpu
  */
 import { runCases } from './cases.mjs';
+import { checkPanel } from './panel.mjs';
 import { loadCpuHarness } from '../tools/lib/harness.mjs';
 import { openHarness } from '../tools/lib/page.mjs';
 
@@ -39,6 +40,10 @@ if (backend === 'gpu') {
   console.error(`unknown backend "${backend}" — expected cpu or gpu`);
   process.exit(1);
 }
+
+// the try-out app's coverage of the engine — the same answer either way, so
+// it rides along with whichever backend was asked for
+results.push(...(await checkPanel()));
 
 let failed = 0;
 for (const r of results) {
