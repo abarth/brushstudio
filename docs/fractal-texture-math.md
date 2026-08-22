@@ -367,27 +367,63 @@ intact material, with `depth` the contrast dial. Getting that match takes
 two separate deconvolutions, and it is worth being precise about which
 kernel each one undoes:
 
-* **Second moment (spectrum):** the `1/H` division of §3 undoes the
-  scatter kernel's variance filtering. It applies fully to spectral
-  fields, but for the structural generators it only shapes their *fbm
-  component* — Worley cells, scratch strokes, fault steps and vein ridges
-  are laid in the spatial domain and are not spectrally pre-compensated.
 * **First moment (value curve):** the mask buffer over-composites, so
   `n̄ ≈ c̄/Δ_dual` overlapping stamps accumulate `m = 1 − Π(1 − v)`. To
   land the accumulated mask on a target `1 − depth·damage(x)`, each stamp
   must carry `v = 1 − (depth·damage)^(1/n̄)` — without this inverse, mid
   tones compress toward white and the painted texture is flatter than the
   design.
+* **Second moment (spectrum):** *exempt.* The `1/H` division of §3 undoes
+  scatter smearing in a train that relies on scatter to decorrelate — a
+  print's union. A tonal train is kept **near-rigid** (below), so the
+  stroke window reproduces the tip spectrum directly, the value curve is
+  the whole deconvolution, and `fractal-tip` sets `H ≡ 1` for
+  `maskMode: "tonal"`. Dividing by `H` anyway would pump `1/H → 27×`
+  power into the modes a rigid train no longer smears (`k ≲ 1.5 c/dia` at
+  scatter 0.2) — which is precisely the splotch band.
 
-Two approximations remain, both benign at the shipped trains and checked
-by the stroke-window comparison rather than assumed: overlapping stamps
-sample the SAME bitmap at small offsets, so the union is correlated (the
-value inverse treats it as exact re-stamping, which it nearly is at
-`S ≈ 0.35·d_dual`); and the scatter offsets smear the tonal field by the
-scatter marginal — visible as a soft burnish mottle, not as lost
-structure. A tonal `delta` mapping can be inverted (`invert: true`) so
-the structure keeps full paint and the ground carves: scratches as darker
-gouges in a mid-tone material rather than pale lines in a solid one.
+**The near-rigid train.** The value inverse assumes every point sees
+exactly `n̄` stamps. Anything that randomizes the *count* `n(x)` makes the
+accumulated tone `(depth·damage)^(n/n̄)` wander — and since `n` decorrelates
+over one stamp footprint, the wander arrives as dark/light discs at
+exactly stroke width, the most conspicuous scale a stroke owns. Three
+sources, three rules:
+
+1. **Count variance from scatter.** At `scatter 0.7` the per-point count
+   ranged ~2–6 (`n/n̄` from 0.7 to 2), which both splotched the tone and
+   broke the depth dial itself (light levels randomly erased to wisps).
+   Keep the absolute scatter well under the stamp radius —
+   `scatter 0.2` (S = 0.1·d_dual) makes `n(x)` deterministic; measured
+   stamp-scale ripple fell from 4–20% to ≤ 3% of tone, and mean stroke
+   tone landed on the design (`1 − depth/2` for `modulate`) within a few
+   percent.
+2. **Per-stamp tint.** Field content coarser than the stamp makes each
+   stamp tint its whole footprint, and mirror flips re-randomize the sign
+   at every overlap. High-pass the field above ~1.4 c/dia
+   (`spec.highpassK`; the faults generator already does this internally) —
+   the texture band is untouched, the tint term is identically zero.
+3. **The count staircase.** Even a rigid train has a *deterministic*
+   residue: `n(x)` steps between ⌊n̄⌋ and ⌈n̄⌉ with period `Δ_dual`, so the
+   tone carries a comb line at `1/Δ_dual` with peak-to-peak amplitude
+   `≈ tone·|ln tone|/n̄` — a few percent, growing with depth. The audit's
+   `comb p-p %` reads it directly. The one lever that shrinks it is
+   overlap: halving the spacing halves the line (`∝ 1/n̄`), but averages
+   one more independent window into every point and softens texture
+   contrast by `√n̄` — a taste trade, decided per family (scratched-metal,
+   whose flat ground hides nothing and whose hairlines survive averaging,
+   ships at spacing 0.14; the cellular families keep 0.28 and a subtle
+   line). The principled endgame, if a family ever needs both, is an
+   envelope whose translates sum to a constant (a COLA/Hann-style radial
+   taper in the vignette, hop = half the envelope width) — that cancels
+   the staircase identically instead of dividing it.
+
+One approximation remains, checked by the stroke-window comparison rather
+than assumed: overlapping stamps sample the same bitmap under mirror
+flips, so the accumulation is correlated rather than i.i.d.; at the
+shipped trains the window still reads as the designed field. A tonal
+`delta` mapping can be inverted (`invert: true`) so the structure keeps
+full paint and the ground carves: scratches as darker gouges in a
+mid-tone material rather than pale lines in a solid one.
 
 Then calibrate `q` per level against painted strokes (§4). The result ships as a
 plain grayscale PNG under `tips` in the brush document — the engine treats it
@@ -408,6 +444,8 @@ crops and a log-power image of the spectrum for the eye.
 | isotropy | audit `aniso dB` — sector power spread over the texture band | ≲ 4 dB |
 | spectrum | audit `beta` — radial log-log slope over 2–30 c/dia | smooth curve, no bumps; β rises with coverage (sparse prints are legitimately whiter) |
 | coverage | calibration `core` (§4) | target ± 0.02 |
+| splotch | audit `ripple %` — std/mean of the stroke's core-band tone profile smoothed at the mask-stamp diameter (§6's count-variance discs; §3's beading, measured on the mark) | tonal ≲ 3%; prints judged against the §3 `√(H/n̄)` budget |
+| train residue | audit `comb p-p %` — strongest periodic line in the stroke profile over 2–24 c/dia, in excess of its spectral neighbourhood, as p-p percent of tone | ≲ 5%, at any frequency; §6's staircase law says what a lower number costs |
 | breaks | `measure` → `worstGap` | < 0.5 dia (levels ≥ 30%; below that the gaps *are* the design) |
 | ghosts | autocorrelation of the stroke alpha | no secondary peak beyond the texture's own correlation length |
 
@@ -424,6 +462,12 @@ Two readings need interpretation before they are believed:
 * The fx≈0 / fy≈0 axis ridges in the 2-D spectrum are the stroke's and the
   fill's own macro-structure (a row is coherent along its length). They are
   excluded from spike detection and reported separately.
+* `spike ×`, `comb ×` and `aniso dB` are *floor-relative*: on a near-flat
+  tonal mark (a light-damage level is mostly intact paint) the broadband
+  floor collapses and they explode over structure no viewer can see —
+  a 20× spike that measures 0.4% of tone in the stroke, below one 8-bit
+  gray step. For tonal families, believe the absolute stroke-domain
+  numbers (`ripple %`, `comb p-p %`) over the floor-relative ones.
 
 ## 8. Design procedure for a coverage family
 

@@ -1,6 +1,6 @@
 {
  "name": "fault-lines",
- "notes": "Faulted stone as a dual-gated triple: 72 half-plane faults at full step (solid polygonal facets) with subtle ridge lines along the traces, fbm floor at 0.12. Converged from four variants: pure facets collapse into one mass at cut time, heavy lines read as streaks, 48 was bolder but poorer in angular vocabulary; canvas anchoring was considered and rejected in review - all these ship dual-gated. Levels 30/55/80 = light/medium/heavy, calibrated to core-band stroke coverage by tools/fractal-tip.mjs --calibrate; verified by tools/spectrum-audit.mjs. REVISED to a tonal mask (maskMode tonal): the tip carries the tone-mapped field itself rather than a threshold cut, value-curve deconvolved by the mask train's overlap (v = 1-(depth*damage)^(1/n)); the level number is now the damage/modulation DEPTH, not coverage - moderate damage renders as moderate contrast over intact paint.",
+ "notes": "Faulted stone as a dual-gated triple: 72 half-plane faults at full step (solid polygonal facets) with subtle ridge lines along the traces, fbm floor at 0.12. Converged from four variants: pure facets collapse into one mass at cut time, heavy lines read as streaks, 48 was bolder but poorer in angular vocabulary; canvas anchoring was considered and rejected in review - all these ship dual-gated. Levels 30/55/80 = light/medium/heavy, calibrated to core-band stroke coverage by tools/fractal-tip.mjs --calibrate; verified by tools/spectrum-audit.mjs. REVISED to a tonal mask (maskMode tonal): the tip carries the tone-mapped field itself rather than a threshold cut, value-curve deconvolved by the mask train's overlap (v = 1-(depth*damage)^(1/n)); the level number is now the damage/modulation DEPTH, not coverage - moderate damage renders as moderate contrast over intact paint. SPLOTCH fix on review (dark/light discs at stroke width): the mask train is now near-rigid - dual scatter 0.7->0.2, so the per-point stamp count n is deterministic and the composite tone v^n stops wandering at stamp scale; the faults field already carries its own high-pass at 1.6 c/dia inside the generator; tonal masks skip the 1/H spectral pre-comp (a near-rigid train transfers the tip spectrum directly).",
  "native": 1024,
  "seed": 24959857,
  "outDir": ".",
@@ -42,7 +42,7 @@
   "dual": {
    "sizeRatio": 1.3,
    "spacing": 0.28,
-   "scatter": 0.7,
+   "scatter": 0.2,
    "count": 1
   }
  },

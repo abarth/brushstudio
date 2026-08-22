@@ -114,9 +114,17 @@ const lambda = makeLambda();
  * to native. The tip rides the DUAL train in a gated family — the mask is
  * what carries the texture — so its kernel is the dual scatter. A pattern
  * spec (`output: "pattern"`) is canvas-anchored: no train, no kernel,
- * H ≡ 1.
+ * H ≡ 1. A TONAL mask is also exempt: its train is kept near-rigid (small
+ * absolute scatter, deterministic overlap count), so the stroke window
+ * reproduces the tip spectrum directly and the value curve is the whole
+ * deconvolution — dividing by H here would just pump power into the
+ * coarse modes the train no longer smears (1/H → 27× at k ≲ 1.5 for
+ * scatter 0.2), which is the stroke-width splotch band.
  */
-const S_TIP = spec.train?.dual ? spec.train.dual.scatter * (N / 2) : 0;
+const S_TIP =
+  spec.maskMode === 'tonal' ? 0
+  : spec.train?.dual ? spec.train.dual.scatter * (N / 2)
+  : 0;
 /** Scatter transfer H(f) = 1 − Λ(2πfS)² — the kernel we deconvolve by. */
 function scatterTransfer(fPerPx) {
   if (!S_TIP) return 1;
@@ -440,6 +448,32 @@ function veinsField(f) {
 }
 
 /**
+ * Zero every mode below kCut cycles per field width. Structure coarser
+ * than the tip is invisible in a swatch but poisonous in a mask train:
+ * each stamp shows the whole field, so a coarse light/dark imbalance
+ * tints whole stamp footprints — stroke-width splotches under random
+ * offsets and mirror flips. Used per-generator (faults' DC-heavy
+ * half-plane sum) and spec-wide (spec.highpassK, tonal masks).
+ */
+function highpassField(field, kCut) {
+  const re = Float64Array.from(field);
+  const im = new Float64Array(N * N);
+  fft2d(re, im, N);
+  for (let y = 0; y < N; y++) {
+    const fy = binFreq(y, N);
+    for (let x = 0; x < N; x++) {
+      const k = Math.hypot(binFreq(x, N), fy) * N;
+      if (k < kCut) {
+        re[y * N + x] = 0;
+        im[y * N + x] = 0;
+      }
+    }
+  }
+  fft2d(re, im, N, true);
+  return re;
+}
+
+/**
  * Faulting field (field.kind: "faults"): the planar faulting method — sum
  * of random half-plane steps (each fault line raises one side, lowers the
  * other). At low counts the fault lines survive as straight facet edges:
@@ -480,27 +514,8 @@ function faultsField(f) {
   }
   // Each fault is a GLOBAL half-plane, so the sum is DC-heavy: its coarse
   // imbalance makes a 50%-ish threshold cut nearly half-and-half at tip
-  // scale — and a mask like that bares whole stretches of stroke. An
-  // optional high-pass removes structure coarser than highpassK c/dia;
-  // pane interiors stay flat (they are much smaller than the cut) while
-  // the tip-scale light/dark halves equalize.
-  if (f.highpassK) {
-    const re = Float64Array.from(out);
-    const im = new Float64Array(N * N);
-    fft2d(re, im, N);
-    for (let y = 0; y < N; y++) {
-      const fy = binFreq(y, N);
-      for (let x = 0; x < N; x++) {
-        const k = Math.hypot(binFreq(x, N), fy) * N;
-        if (k < f.highpassK) {
-          re[y * N + x] = 0;
-          im[y * N + x] = 0;
-        }
-      }
-    }
-    fft2d(re, im, N, true);
-    out.set(re);
-  }
+  // scale — and a mask like that bares whole stretches of stroke.
+  if (f.highpassK) out.set(highpassField(out, f.highpassK));
   if (f.fbmWeight) {
     const fbm = synthField(buildAmp(null), makePhases(spec.seed + 7));
     let vari = 0;
@@ -1028,7 +1043,7 @@ console.log(
     COMPONENTS.map((b) => `β=${b.beta}@knee ${b.kneeCyclesPerDia}${b.weight ? ` w${b.weight}` : ''}`).join(' + '),
 );
 const FIELD_KIND = spec.field?.kind ?? 'spectral';
-const baseField =
+let baseField =
   FIELD_KIND === 'cellular' ? cellularField(spec.field)
   : FIELD_KIND === 'pores' ? poresField(spec.field)
   : FIELD_KIND === 'veins' ? veinsField(spec.field)
@@ -1038,6 +1053,7 @@ const baseField =
   : FIELD_KIND === 'domains' ? domainsField(spec.field)
   : FIELD_KIND === 'warped' ? warpedField(spec.field)
   : synthField(buildAmp(null));
+if (spec.highpassK) baseField = highpassField(baseField, spec.highpassK);
 
 if (spec.output === 'pattern') {
   // A texture-channel pattern: tileable by FFT construction, no vignette,

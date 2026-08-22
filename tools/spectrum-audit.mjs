@@ -21,14 +21,18 @@
  *   stands far above its own annulus (a periodic artifact is a line; the
  *   texture floor is broadband);
  * - anisotropy: sector power spread over the texture band;
- * - patch and stroke coverage for the record.
+ * - patch and stroke coverage for the record;
+ *
+ * and, from the stroke itself in absolute tone (see strokeStats): the
+ * core-band tone, stamp-scale ripple (splotchiness), and the strongest
+ * coherent periodic component (what any train actually leaves visible).
  *
  * Artifacts land in --out (default out/audit): 1:1 crops of the stroke and
  * patch, and a log-power image of the centred 2-D spectrum.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { binFreq, encodeGrayPng, fft2d, mulberry32 } from './lib/dsp.mjs';
+import { binFreq, encodeGrayPng, fft, fft2d, mulberry32 } from './lib/dsp.mjs';
 import { loadDocs } from './lib/docs.mjs';
 import { loadCpuHarness } from './lib/harness.mjs';
 
@@ -95,6 +99,105 @@ const coverageOf = (alpha) => {
   for (const a of alpha) if (a >= INK_FLOOR) inked++;
   return inked / alpha.length;
 };
+
+/**
+ * Stroke-domain measures, in absolute tone rather than relative to a
+ * spectral floor — the floor of a near-flat tonal mark is so low that the
+ * patch's `spike ×`/`aniso dB` explode on structure a viewer cannot see.
+ *
+ * - `ripplePct`: std/mean of the core-band tone profile smoothed at the
+ *   mask stamp diameter — splotchiness at stroke-width scale (the §3
+ *   beading number, measured on the finished mark).
+ * - `combPpPct`: the strongest periodic LINE in the profile's spectrum
+ *   over 2–24 c/dia — each bin's amplitude in excess of the median of its
+ *   ±25% neighbourhood — as peak-to-peak percent of tone. A dab or mask
+ *   train survives the across-band average coherently and stands above
+ *   its neighbourhood; broadband texture is its own neighbourhood and
+ *   cancels out of the excess.
+ */
+function strokeStats(alpha, w, hh, d, stampD) {
+  const rowMean = new Float64Array(hh);
+  for (let y = 0; y < hh; y++) {
+    let s = 0;
+    for (let x = 0; x < w; x++) s += alpha[y * w + x];
+    rowMean[y] = s / w;
+  }
+  const peak = Math.max(...rowMean);
+  let y0 = hh, y1 = 0;
+  for (let y = 0; y < hh; y++) {
+    if (rowMean[y] > 0.5 * peak) {
+      y0 = Math.min(y0, y);
+      y1 = Math.max(y1, y);
+    }
+  }
+  const margin = Math.ceil(d * 2 + 60); // clear of the stroke's ramp-in/out
+  const x0 = margin;
+  const x1 = w - margin;
+  const col = new Float64Array(x1 - x0);
+  for (let x = x0; x < x1; x++) {
+    let s = 0;
+    for (let y = y0; y <= y1; y++) s += alpha[y * w + x];
+    col[x - x0] = s / (y1 - y0 + 1);
+  }
+  let tone = 0;
+  for (const v of col) tone += v;
+  tone /= col.length;
+
+  // stamp-scale ripple: boxcar at the stamp diameter, std/mean of interior
+  const half = Math.round(stampD / 2);
+  let mean = 0;
+  let count = 0;
+  const smooth = new Float64Array(col.length);
+  for (let x = half; x < col.length - half; x++) {
+    let s = 0;
+    for (let dx = -half; dx <= half; dx++) s += col[x + dx];
+    smooth[x] = s / (2 * half + 1);
+    mean += smooth[x];
+    count++;
+  }
+  mean /= count;
+  let varr = 0;
+  for (let x = half; x < col.length - half; x++) varr += (smooth[x] - mean) ** 2;
+  const ripplePct = (100 * Math.sqrt(varr / count)) / mean;
+
+  // coherent comb: Hann-windowed 1-D spectrum of the raw profile
+  let n = 1;
+  while (n * 2 <= col.length) n *= 2;
+  const off = (col.length - n) >> 1;
+  const re = new Float64Array(n);
+  const im = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const win = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (n - 1));
+    re[i] = (col[off + i] - tone) * win;
+  }
+  fft(re, im);
+  const amps = new Float64Array(n / 2);
+  for (let k = 1; k < n / 2; k++) amps[k] = Math.hypot(re[k], im[k]);
+  let best = 0;
+  let bestK = 0;
+  for (let k = 1; k < n / 2; k++) {
+    const c = (k / n) * d; // cycles per tip diameter
+    if (c < 2 || c > 24) continue;
+    const hood = [];
+    for (let j = Math.max(1, Math.round(k / 1.25)); j <= Math.min(n / 2 - 1, Math.round(k * 1.25)); j++) {
+      if (Math.abs(j - k) > 2) hood.push(amps[j]);
+    }
+    hood.sort((a, b) => a - b);
+    const floor = hood.length ? hood[hood.length >> 1] : 0;
+    const excess = amps[k] - floor;
+    if (excess > best) {
+      best = excess;
+      bestK = c;
+    }
+  }
+  const amp = (2 * best) / n / 0.5; // undo 1/N and the Hann coherent gain
+  return {
+    tone: tone / 255,
+    ripplePct,
+    combPpPct: (100 * 2 * amp) / tone,
+    combAtCPerDia: +bestK.toFixed(1),
+  };
+}
 
 /** Central n×n window of an alpha buffer as floats 0..1. */
 function centerWindow(alpha, w, hh, n) {
@@ -302,6 +405,8 @@ for (const brush of resolved) {
   const patch = await paintPatch(settings, d);
   const field = centerWindow(patch.alpha, patch.w, patch.h, FFT_N);
   const a = audit(field, FFT_N, d);
+  const stampD = settings.dual?.enabled ? settings.dual.size : d;
+  const s = strokeStats(stroke.alpha, stroke.w, stroke.h, d, stampD);
 
   writeFileSync(
     join(OUT, `${name}.stroke.png`),
@@ -314,7 +419,21 @@ for (const brush of resolved) {
   spectrumPng(a.spectrumRe, a.spectrumIm, FFT_N, d, join(OUT, `${name}.spectrum.png`));
   writeFileSync(
     join(OUT, `${name}.radial.json`),
-    JSON.stringify({ id: name, beta: a.beta, radial: a.radial.map(({ k, power }) => ({ k: +k.toFixed(3), power })) }, null, 1),
+    JSON.stringify(
+      {
+        id: name,
+        beta: a.beta,
+        stroke: {
+          tone: +s.tone.toFixed(3),
+          ripplePct: +s.ripplePct.toFixed(2),
+          combPpPct: +s.combPpPct.toFixed(2),
+          combAtCPerDia: s.combAtCPerDia,
+        },
+        radial: a.radial.map(({ k, power }) => ({ k: +k.toFixed(3), power })),
+      },
+      null,
+      1,
+    ),
   );
 
   rows.push({
@@ -327,8 +446,15 @@ for (const brush of resolved) {
     'comb @': `${a.combAlong.k} c/dia`,
     'rows ×': a.combAcross.ratio.toFixed(1),
     'aniso dB': a.anisotropyDb.toFixed(1),
+    tone: s.tone.toFixed(3),
+    'ripple %': s.ripplePct.toFixed(1),
+    'comb pp %': `${s.combPpPct.toFixed(1)} @${s.combAtCPerDia}`,
   });
-  console.log(`${name}: β=${a.beta.toFixed(2)}, spike ${a.worstSpike.ratio.toFixed(1)}× @${a.worstSpike.k}c/dia, comb ${a.combAlong.ratio.toFixed(1)}× @${a.combAlong.k}c/dia, aniso ${a.anisotropyDb.toFixed(1)}dB`);
+  console.log(
+    `${name}: β=${a.beta.toFixed(2)}, spike ${a.worstSpike.ratio.toFixed(1)}× @${a.worstSpike.k}c/dia, ` +
+      `comb ${a.combAlong.ratio.toFixed(1)}× @${a.combAlong.k}c/dia, aniso ${a.anisotropyDb.toFixed(1)}dB | ` +
+      `stroke tone ${s.tone.toFixed(3)}, ripple ${s.ripplePct.toFixed(1)}%, comb p-p ${s.combPpPct.toFixed(1)}% @${s.combAtCPerDia}c/dia`,
+  );
 }
 console.table(rows);
 console.log(`artifacts in ${OUT}/`);

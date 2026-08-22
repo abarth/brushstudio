@@ -1,6 +1,6 @@
 {
  "name": "leather",
- "notes": "Pebbled leather: flat-toned grains (per-cell value dominant over dome shading, per review: contrast lives BETWEEN domains, not within), crease network via deep walls. The fine-grained sibling was scrapped on review; this is the single leather. Levels 30/55/80 = light/medium/heavy, calibrated to core-band stroke coverage by tools/fractal-tip.mjs --calibrate; verified by tools/spectrum-audit.mjs. REVISED to a tonal mask (maskMode tonal): the tip carries the tone-mapped field itself rather than a threshold cut, value-curve deconvolved by the mask train's overlap (v = 1-(depth*damage)^(1/n)); the level number is now the damage/modulation DEPTH, not coverage - moderate damage renders as moderate contrast over intact paint.",
+ "notes": "Pebbled leather: flat-toned grains (per-cell value dominant over dome shading, per review: contrast lives BETWEEN domains, not within), crease network via deep walls. The fine-grained sibling was scrapped on review; this is the single leather. Levels 30/55/80 = light/medium/heavy, calibrated to core-band stroke coverage by tools/fractal-tip.mjs --calibrate; verified by tools/spectrum-audit.mjs. REVISED to a tonal mask (maskMode tonal): the tip carries the tone-mapped field itself rather than a threshold cut, value-curve deconvolved by the mask train's overlap (v = 1-(depth*damage)^(1/n)); the level number is now the damage/modulation DEPTH, not coverage - moderate damage renders as moderate contrast over intact paint. SPLOTCH fix on review (dark/light discs at stroke width): the mask train is now near-rigid - dual scatter 0.7->0.2, so the per-point stamp count n is deterministic and the composite tone v^n stops wandering at stamp scale; the field is high-passed above 1.4 c/dia (spec highpassK) so no stamp tints its whole footprint; tonal masks skip the 1/H spectral pre-comp (a near-rigid train transfers the tip spectrum directly).",
  "native": 1024,
  "seed": 24325116,
  "outDir": ".",
@@ -34,6 +34,7 @@
   "rag": 0.18
  },
  "aaCanvasPx": 0.5,
+ "highpassK": 1.4,
  "train": {
   "size": 120,
   "flow": 0.9,
@@ -46,7 +47,7 @@
   "dual": {
    "sizeRatio": 1.3,
    "spacing": 0.28,
-   "scatter": 0.7,
+   "scatter": 0.2,
    "count": 1
   }
  },
