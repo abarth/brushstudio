@@ -18,7 +18,8 @@ import { StrokeSession } from '../src/gpu/stroke';
 import { resolveBrush, type AssetBag, type BrushDoc } from '../src/harness/brushDoc';
 import { diffFromDefaults } from '../src/harness/patch';
 import { makeLayerMeta, type HSV, type LayerMeta } from '../src/types';
-import { BLEND_CHOICES, CONTROL_CHOICES, GROUPS, type Item, type Path } from './groups';
+import { numberField } from './field';
+import { BLEND_CHOICES, CONTROL_CHOICES, GROUPS, type Group, type Item, type Path } from './groups';
 import { drawSwatch } from './swatch';
 
 /**
@@ -30,11 +31,19 @@ import { drawSwatch } from './swatch';
  * patch, so a reviewer's fiddling lands in the brush document rather than
  * being described in prose and re-guessed.
  *
- * The panel is built for someone who already knows the engine: no prose, no
- * controls for sections that are switched off, the tip and texture bitmaps
- * shown as pictures, and every field of `BrushSettings` reachable. A knob the
- * engine has and the app does not is a knob that gets tuned by editing JSON
- * and re-rendering, which is the slow path this app exists to avoid.
+ * The panel holds all 54 of the engine's settings, which is more than fits on
+ * a screen, so it is built around four ideas rather than a longer list:
+ *
+ *   the rail    every section at once — which are on, which you have moved
+ *   the reads   each section's governing ratio, computed live while you drag
+ *   the field   drag it for fine, click and type for exact; the track is for
+ *               seeing where a value sits, not for landing on one
+ *   the dot     a value you have moved off what the document had, and a
+ *               double-click on its name to put it back
+ *
+ * Everything else stays out of the way: the library is a popover, the patch
+ * is behind a button, and a section that is switched off shows nothing but
+ * its switch.
  */
 
 /**
@@ -70,6 +79,11 @@ function setStatus(text: string, ms = 3000): void {
   clearTimeout(statusTimer);
   if (text && ms > 0) statusTimer = window.setTimeout(() => node.classList.remove('on'), ms);
 }
+
+/** The status bar under the panel: what the thing under the pointer does. */
+const setHint = (text: string) => {
+  $('hint').textContent = text;
+};
 
 // ---------------------------------------------------------------------------
 // the library
@@ -115,6 +129,7 @@ function renderLibrary(): void {
     ? LIBRARY.filter((e) => `${e.folder}/${e.name}`.toLowerCase().includes(query))
     : LIBRARY;
   $('count').textContent = query ? `${shown.length}/${LIBRARY.length}` : String(LIBRARY.length);
+  $('brushname').textContent = LIBRARY.find((e) => e.path === current)?.name ?? 'brush';
 
   const list = $('brushes');
   list.textContent = '';
@@ -135,7 +150,10 @@ function renderLibrary(): void {
       where.textContent = entry.folder;
       row.append(where);
     }
-    row.addEventListener('click', () => void selectBrush(entry.path));
+    row.addEventListener('click', () => {
+      $<HTMLDetailsElement>('library').open = false;
+      void selectBrush(entry.path);
+    });
     if (entry.path === current) queueMicrotask(() => row.scrollIntoView({ block: 'nearest' }));
     list.append(row);
   }
@@ -170,6 +188,8 @@ async function loadAssets(path: string, doc: BrushDoc): Promise<AssetBag> {
 const layer: LayerMeta = makeLayerMeta({ id: 'paint', name: 'paint' });
 let engine: PaintEngine;
 let settings: BrushSettings;
+/** the document as it was loaded — what a value is "changed" against */
+let baseline: BrushSettings;
 let session: StrokeSession | null = null;
 let dark = false;
 let erasing = false;
@@ -258,16 +278,20 @@ canvas.addEventListener('pointerleave', endStroke);
 window.addEventListener('resize', draw);
 
 // ---------------------------------------------------------------------------
-// controls
+// reading and writing one setting
 // ---------------------------------------------------------------------------
 
 type Value = number | boolean | string;
 
-function getAt(path: Path): Value {
-  const [section, key] = path;
-  const value = settings[section];
-  if (key === undefined) return value as Value;
-  return (value as unknown as Record<string, Value>)[key];
+const sectionOf = (from: BrushSettings, path: Path) => from[path[0]];
+/** the section a path names, as a plain bag of fields */
+const fieldsOf = (from: BrushSettings, path: Path) =>
+  sectionOf(from, path) as unknown as Record<string, unknown>;
+
+function getAt(path: Path, from: BrushSettings = settings): Value {
+  const [, key] = path;
+  if (key === undefined) return sectionOf(from, path) as Value;
+  return fieldsOf(from, path)[key] as Value;
 }
 
 function setAt(path: Path, value: Value): void {
@@ -280,10 +304,45 @@ function setAt(path: Path, value: Value): void {
 }
 
 /** A `DynamicControl` is the one settings value that is an object. */
-function controlAt(path: Path): DynamicControl {
-  const [section, key] = path;
-  return (settings[section] as unknown as Record<string, DynamicControl>)[key!];
+function controlAt(path: Path, from: BrushSettings = settings): DynamicControl {
+  return fieldsOf(from, path)[path[1]!] as DynamicControl;
 }
+
+/** Has this value been moved off what the document had? */
+function moved(path: Path): boolean {
+  const key = path[1];
+  const now = key === undefined ? sectionOf(settings, path) : fieldsOf(settings, path)[key];
+  const was = key === undefined ? sectionOf(baseline, path) : fieldsOf(baseline, path)[key];
+  return JSON.stringify(now) !== JSON.stringify(was);
+}
+
+/** Put one value back the way the document had it. */
+function revertPath(path: Path): void {
+  const [section, key] = path;
+  if (key === undefined) {
+    (settings as unknown as Record<string, unknown>)[section] = getAt(path, baseline);
+  } else {
+    const was = fieldsOf(baseline, path)[key];
+    // a DynamicControl is an object; copy it rather than sharing the baseline's
+    fieldsOf(settings, path)[key] =
+      was !== null && typeof was === 'object' ? { ...(was as object) } : was;
+  }
+}
+
+/** Every settings path a group binds, including its own switch. */
+function pathsOf(group: Group): Path[] {
+  const out: Path[] = group.toggle ? [[group.toggle, 'enabled']] : [];
+  for (const item of group.items) {
+    if (item.row === 'paint') continue;
+    out.push(item.path);
+    if (item.row === 'bitmap' && item.mode) out.push(item.mode);
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// the panel
+// ---------------------------------------------------------------------------
 
 /**
  * The bitmaps the current document declares: `@name` against the id the
@@ -295,21 +354,34 @@ let docTips: [string, string][] = [];
 let docPatterns: [string, string][] = [];
 /** engine id -> the document's name for it, the reverse of the two above */
 let aliasBack = new Map<string, string>();
+/** sections the user has folded shut by clicking the header */
+const folded = new Set<string>();
 
 /**
  * One closure per row, run after any change. Rows read their value back out
  * of the settings rather than trusting what they last wrote, so a control
- * whose state depends on another — a hardness that only the round tip uses —
- * is right without every row having to know who might move it.
+ * whose state depends on another — a hardness that only the round tip uses,
+ * a ratio that two sections feed — is right without every row having to know
+ * who might move it.
  */
 let refresh: (() => void)[] = [];
 
-const inertly = (row: HTMLElement, item: Item) => {
-  if (!('inert' in item) || !item.inert) return;
-  // dimmed, not disabled: the value is still the brush's, and worth setting
-  // before flipping the switch that gives it teeth
-  row.classList.toggle('inert', item.inert(settings));
-};
+/** Wires the parts every row shares: the hint, the dot, and the revert. */
+function wireRow(row: HTMLElement, label: HTMLElement, item: Item): void {
+  row.addEventListener('pointerenter', () => setHint(item.hint));
+  row.addEventListener('focusin', () => setHint(item.hint));
+  if (item.row === 'paint') return;
+  label.title = 'double-click to put this back the way the document had it';
+  label.addEventListener('dblclick', () => {
+    revertPath(item.path);
+    if (item.row === 'bitmap' && item.mode) revertPath(item.mode);
+    onChange();
+  });
+  refresh.push(() => {
+    row.classList.toggle('set', moved(item.path));
+    if ('inert' in item && item.inert) row.classList.toggle('inert', item.inert(settings));
+  });
+}
 
 function fillOptions(
   select: HTMLSelectElement,
@@ -348,47 +420,55 @@ function sliderRow(item: Item & { row: 'slider' }): HTMLElement {
   const row = el('div', 'row');
   const label = el('label');
   label.textContent = item.label;
-  const input = el('input');
-  input.type = 'range';
-  input.min = String(item.min);
-  input.max = String(item.max);
-  input.step = String(item.step);
-  const out = el('output');
-  // the readout comes from the setting, not from the slider: a borrowed .abr
-  // can carry a size past the end of the track, and a clamped number on
-  // screen would be a lie about the brush
-  const show = (v: number) => {
-    out.textContent = item.pct ? `${Math.round(v * 100)}%` : String(Math.round(v * 100) / 100);
-  };
-  input.addEventListener('input', () => {
-    const v = Number(input.value);
-    setAt(item.path, v);
-    show(v);
+  const track = el('input');
+  track.type = 'range';
+  track.min = String(item.min);
+  track.max = String(item.max);
+  track.step = String(item.step);
+  track.tabIndex = -1; // the number beside it is the keyboard target
+  const field = numberField({
+    min: item.min,
+    max: item.max,
+    step: item.step,
+    pct: item.pct,
+    get: () => Number(getAt(item.path)),
+    set: (v) => setAt(item.path, v),
+    commit: onChange,
+  });
+  track.addEventListener('input', () => {
+    setAt(item.path, Number(track.value));
     onChange();
   });
   refresh.push(() => {
     const v = Number(getAt(item.path));
-    if (input.value !== String(v)) input.value = String(v);
-    show(v);
-    inertly(row, item);
+    if (track.value !== String(v)) track.value = String(v);
+    field.sync();
   });
-  row.append(label, input, out);
+  row.append(label, track, field.node);
+  wireRow(row, label, item);
   return row;
 }
 
 function checkRow(item: Item & { row: 'check' }): HTMLElement {
-  const row = el('label', 'check');
+  const row = el('div', 'row flag');
+  // the box sits where every other row's control sits, so the panel keeps one
+  // vertical line of things you can operate; the name rides along after it,
+  // which is also the only way "pressure → opacity" fits
+  const label = el('label');
   const input = el('input');
   input.type = 'checkbox';
+  const text = el('span');
+  text.textContent = item.label;
   input.addEventListener('input', () => {
     setAt(item.path, input.checked);
     onChange();
   });
   refresh.push(() => {
     input.checked = !!getAt(item.path);
-    inertly(row, item);
   });
-  row.append(input, document.createTextNode(` ${item.label}`));
+  label.append(input, text);
+  row.append(label);
+  wireRow(row, label, item);
   return row;
 }
 
@@ -405,9 +485,9 @@ function choiceRow(item: Item & { row: 'choice' }): HTMLElement {
   refresh.push(() => {
     const v = String(getAt(item.path));
     if (select.value !== v) select.value = v;
-    inertly(row, item);
   });
   row.append(label, select);
+  wireRow(row, label, item);
   return row;
 }
 
@@ -418,37 +498,40 @@ function controlRow(item: Item & { row: 'control' }): HTMLElement {
   label.textContent = item.label;
   const select = el('select');
   fillOptions(select, CONTROL_CHOICES, controlAt(item.path).source);
-  const steps = el('input');
-  steps.type = 'number';
-  steps.min = '1';
-  steps.max = '999';
-  steps.title = 'fade length, in spacing steps';
+  const steps = numberField({
+    min: 1,
+    max: 999,
+    step: 1,
+    get: () => controlAt(item.path).fadeSteps,
+    set: (v) => {
+      controlAt(item.path).fadeSteps = v;
+    },
+    commit: onChange,
+  });
+  steps.node.title = 'fade length, in spacing steps';
   select.addEventListener('input', () => {
     controlAt(item.path).source = select.value as ControlSource;
-    onChange();
-  });
-  steps.addEventListener('input', () => {
-    controlAt(item.path).fadeSteps = Math.max(1, Math.round(Number(steps.value) || 1));
     onChange();
   });
   refresh.push(() => {
     const ctrl = controlAt(item.path);
     if (select.value !== ctrl.source) select.value = ctrl.source;
-    if (steps.value !== String(ctrl.fadeSteps)) steps.value = String(ctrl.fadeSteps);
+    steps.sync();
     // hidden rather than removed, so the row does not change shape as the
     // source is cycled past Fade
-    steps.classList.toggle('gone', ctrl.source !== 'fade');
-    inertly(row, item);
+    steps.node.classList.toggle('gone', ctrl.source !== 'fade');
   });
-  row.append(label, select, steps);
+  row.append(label, select, steps.node);
+  wireRow(row, label, item);
   return row;
 }
 
 /** The bitmap in a slot, the picker that changes it, and how it combines. */
 function bitmapRow(item: Item & { row: 'bitmap' }): HTMLElement {
-  const row = el('div', 'bitmap');
+  const row = el('div', 'row bitmap');
+  const side = el('div', 'side');
   const swatch = el('canvas');
-  const side = el('div');
+  swatch.tabIndex = 0;
   const select = el('select');
   const meta = el('div', 'meta');
   const isTip = item.of === 'tip';
@@ -508,18 +591,18 @@ function bitmapRow(item: Item & { row: 'bitmap' }): HTMLElement {
         depth: tex.depth,
       };
       drawSwatch(swatch, map, (v) => texValue(v, bci));
-      // scale is relative to the pattern's own size, so what matters is the
-      // tile it lands on the canvas at, against the tip diameter
-      meta.textContent = `${map.size}px tile → ${Math.round(map.size * tex.scale)}px`;
+      meta.textContent = `${map.size}px tile`;
     }
   });
 
   row.append(swatch, side);
+  // the picture is the name here, so it is also the thing you double-click
+  wireRow(row, swatch, item);
   return row;
 }
 
 /** Foreground and background — the two colours Color Dynamics works between. */
-function paintRow(): HTMLElement {
+function paintRow(item: Item & { row: 'paint' }): HTMLElement {
   const row = el('div', 'row paint');
   const label = el('label');
   label.textContent = 'fg / bg';
@@ -545,6 +628,7 @@ function paintRow(): HTMLElement {
     for (const [which, well] of wells) if (well.value !== ink[which]) well.value = ink[which];
   });
   row.append(label, pair, swap);
+  wireRow(row, label, item);
   return row;
 }
 
@@ -555,7 +639,96 @@ function buildRow(item: Item): HTMLElement {
     case 'choice': return choiceRow(item);
     case 'control': return controlRow(item);
     case 'bitmap': return bitmapRow(item);
-    case 'paint': return paintRow();
+    case 'paint': return paintRow(item);
+  }
+}
+
+// --- sections and the rail ------------------------------------------------
+
+const changesIn = (group: Group) => pathsOf(group).filter(moved).length;
+const isOn = (group: Group) =>
+  !group.toggle || !!(settings[group.toggle] as { enabled: boolean }).enabled;
+
+function buildSection(group: Group): HTMLElement {
+  const box = el('section', 'group');
+  box.id = `sec-${group.short}`;
+  const head = el('header');
+  const line = el('div', 'line');
+  const title = el('h2');
+  title.textContent = group.title;
+  const count = el('span', 'count');
+  const reads = el('p', 'reads');
+  const body = el('div', 'body');
+
+  let toggle: HTMLInputElement | null = null;
+  if (group.toggle) {
+    toggle = el('input');
+    toggle.type = 'checkbox';
+    toggle.title = `switch ${group.title} on or off`;
+    toggle.addEventListener('input', () => {
+      (settings[group.toggle!] as { enabled: boolean }).enabled = toggle!.checked;
+      // switching a section on is a request to work on it
+      if (toggle!.checked) folded.delete(group.title);
+      onChange();
+    });
+    line.append(toggle);
+  }
+  // the title folds the section by hand; the switch decides whether it does
+  // anything at all. Two different questions, two different targets.
+  title.addEventListener('click', () => {
+    if (folded.has(group.title)) folded.delete(group.title);
+    else folded.add(group.title);
+    onChange();
+  });
+  line.append(title, count);
+  head.append(line);
+  if (group.reads) head.append(reads);
+  box.append(head, body);
+  for (const item of group.items) body.append(buildRow(item));
+
+  refresh.push(() => {
+    const on = isOn(group);
+    const open = on && !folded.has(group.title);
+    box.classList.toggle('off', !on);
+    box.classList.toggle('shut', !open);
+    if (toggle) toggle.checked = on;
+    const n = changesIn(group);
+    count.textContent = n ? String(n) : '';
+    box.classList.toggle('set', n > 0);
+    if (group.reads) {
+      const read = open ? group.reads(settings) : null;
+      reads.textContent = read?.text ?? '';
+      reads.classList.toggle('warn', !!read?.warn);
+      reads.hidden = !read;
+    }
+  });
+  return box;
+}
+
+/** The rail: every section at once — what is on, and where you have been. */
+function buildRail(): void {
+  const rail = $('rail');
+  rail.textContent = '';
+  for (const group of GROUPS) {
+    const chip = el('button', 'chip');
+    const dot = el('i');
+    const name = el('span');
+    name.textContent = group.short;
+    const count = el('span', 'count');
+    chip.append(dot, name, count);
+    chip.title = `go to ${group.title}`;
+    chip.addEventListener('click', () => {
+      folded.delete(group.title);
+      onChange();
+      $(`sec-${group.short}`).scrollIntoView({ block: 'start', behavior: 'smooth' });
+    });
+    refresh.push(() => {
+      chip.classList.toggle('on', isOn(group));
+      const n = changesIn(group);
+      chip.classList.toggle('set', n > 0);
+      count.textContent = n ? String(n) : '';
+    });
+    rail.append(chip);
   }
 }
 
@@ -563,31 +736,8 @@ function buildControls(): void {
   const host = $('controls');
   host.textContent = '';
   refresh = [];
-  for (const group of GROUPS) {
-    const box = el('div', 'group');
-    const head = el('h2');
-    head.textContent = group.title;
-    const body = el('div', 'body');
-
-    if (group.toggle) {
-      const flag = () => settings[group.toggle!] as { enabled: boolean };
-      const on = el('input');
-      on.type = 'checkbox';
-      on.checked = !!flag().enabled;
-      // a section that is off is collapsed to its switch: its controls reach
-      // nothing, and reading them as if they did is the confusing part
-      box.classList.toggle('off', !on.checked);
-      on.addEventListener('input', () => {
-        flag().enabled = on.checked;
-        box.classList.toggle('off', !on.checked);
-        onChange();
-      });
-      head.prepend(on);
-    }
-    box.append(head, body);
-    for (const item of group.items) body.append(buildRow(item));
-    host.append(box);
-  }
+  buildRail();
+  for (const group of GROUPS) host.append(buildSection(group));
 }
 
 /**
@@ -613,6 +763,9 @@ function reAlias(patch: BrushPatch): BrushPatch {
 /** Every control ends here: re-read the panel, re-emit the patch. */
 function onChange(): void {
   for (const run of refresh) run();
+  const total = GROUPS.reduce((n, group) => n + changesIn(group), 0);
+  $('changes').textContent = total ? `${total} changed` : '';
+  $<HTMLButtonElement>('revert').disabled = total === 0;
   $('patch').textContent = JSON.stringify(reAlias(diffFromDefaults(settings)), null, 2);
 }
 
@@ -626,10 +779,12 @@ async function selectBrush(path: string): Promise<void> {
     const assets = await loadAssets(path, doc);
     const resolved = await resolveBrush(doc, assets, path);
     settings = resolved.settings;
+    baseline = JSON.parse(JSON.stringify(settings)) as BrushSettings;
     docTips = Object.keys(doc.tips ?? {}).map((name) => [name, resolved.aliases[name]]);
     docPatterns = Object.keys(doc.patterns ?? {}).map((name) => [name, resolved.aliases[name]]);
     aliasBack = new Map(Object.entries(resolved.aliases).map(([name, id]) => [id, name]));
     current = path;
+    folded.clear();
     renderLibrary();
     buildControls();
     onChange();
@@ -659,6 +814,8 @@ async function boot(): Promise<void> {
   clear();
 }
 
+// --- chrome ---------------------------------------------------------------
+
 const search = $<HTMLInputElement>('search');
 search.addEventListener('input', renderLibrary);
 // arrow keys walk the filtered list without leaving the filter box: type two
@@ -670,16 +827,23 @@ search.addEventListener('keydown', (e) => {
   const next = shown[Math.max(0, Math.min(shown.length - 1, at + (e.key === 'ArrowDown' ? 1 : -1)))];
   if (next && next.path !== current) void selectBrush(next.path);
 });
-
-const menu = $<HTMLDetailsElement>('menu');
-menu.addEventListener('click', (e) => {
-  // a command is a one-shot; the toggles are worth staying open for
-  if ((e.target as HTMLElement).tagName === 'BUTTON') menu.open = false;
+$<HTMLDetailsElement>('library').addEventListener('toggle', function () {
+  if (this.open) search.focus();
 });
+
+// one popover open at a time, and a click anywhere else shuts it
+const pops = [...document.querySelectorAll<HTMLDetailsElement>('details.pop')];
 document.addEventListener('pointerdown', (e) => {
-  if (menu.open && !menu.contains(e.target as Node)) menu.open = false;
+  for (const pop of pops) if (pop.open && !pop.contains(e.target as Node)) pop.open = false;
 });
+for (const pop of pops) {
+  pop.addEventListener('click', (e) => {
+    // a command is a one-shot; the toggles are worth staying open for
+    if ((e.target as HTMLElement).tagName === 'BUTTON') pop.open = false;
+  });
+}
 
+$('controls').addEventListener('pointerleave', () => setHint(''));
 $('clear').addEventListener('click', clear);
 $('erase').addEventListener('input', (e) => {
   erasing = (e.target as HTMLInputElement).checked;
@@ -692,6 +856,15 @@ $('dark').addEventListener('input', (e) => {
   [ink.fg, ink.bg] = [ink.bg, ink.fg];
   onChange();
   clear();
+});
+$('revert').addEventListener('click', () => {
+  settings = JSON.parse(JSON.stringify(baseline)) as BrushSettings;
+  onChange();
+});
+$('showpatch').addEventListener('click', () => {
+  const patch = $('patch');
+  patch.hidden = !patch.hidden;
+  $('showpatch').classList.toggle('on', !patch.hidden);
 });
 $('save').addEventListener('click', async () => {
   const data = await engine.readComposite(state());

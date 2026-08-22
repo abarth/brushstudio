@@ -13,7 +13,7 @@
   <body>
     <header>
       <h1>brushstudio</h1>
-      <details id="menu">
+      <details id="menu" class="pop">
         <summary aria-label="menu" title="menu">&#9776;</summary>
         <div class="sheet">
           <button id="clear">Clear canvas</button>
@@ -27,8 +27,12 @@
       <canvas id="canvas"></canvas>
       <p id="status"></p>
       <aside>
-        <section id="library">
-          <div class="find">
+        <details id="library" class="pop">
+          <summary>
+            <span id="brushname">brush</span>
+            <span id="count"></span>
+          </summary>
+          <div class="sheet">
             <input
               id="search"
               type="search"
@@ -36,15 +40,21 @@
               autocomplete="off"
               spellcheck="false"
             />
-            <span id="count"></span>
+            <ul id="brushes"></ul>
           </div>
-          <ul id="brushes"></ul>
-        </section>
+        </details>
+        <nav id="rail"></nav>
         <div id="controls"></div>
-        <section id="patchbox">
-          <div class="head">settings patch <button id="copy">Copy</button></div>
-          <pre id="patch"></pre>
-        </section>
+        <pre id="patch" hidden></pre>
+        <footer id="bar">
+          <p id="hint"></p>
+          <div class="acts">
+            <span id="changes"></span>
+            <button id="revert" title="put every value back the way the document had it">revert</button>
+            <button id="showpatch" title="the settings patch this brush would be saved as">patch</button>
+            <button id="copy" title="copy the patch, ready to paste into the brush document">copy</button>
+          </div>
+        </footer>
       </aside>
     </main>
     <script type="module" src="/web/main.ts"></script>

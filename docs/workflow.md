@@ -120,6 +120,14 @@ and the two colours Color Dynamics works between are all on the panel. A
 hunch about a brush can be tried under the hand before it is written down,
 which is the whole point of the step.
 
+Each section carries its own ratio from `docs/parameters.md`, recomputed as
+you drag: the stroke section shows `K = flow ÷ spacing` with the band it
+falls in, scattering shows `ρ = scatter ÷ spacing` and says so when it is
+under 3, and the dual brush says outright when its spacing has passed the
+point where the mask leaves holes. The numbers a reviewer would otherwise
+have to be told are on screen while they paint. A value moved off what the
+document had turns amber, and a double-click on its name puts it back.
+
 ## 7. Revise
 
 Change **one or two** parameters per iteration and re-measure. The

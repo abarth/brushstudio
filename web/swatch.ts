@@ -10,7 +10,7 @@ import type { GrayMap } from '../src/brush/patterns';
  */
 
 /** Swatch edge in CSS pixels; the canvas is rasterised at device resolution. */
-export const SWATCH = 96;
+export const SWATCH = 88;
 
 /**
  * Draws a gray map into a canvas, white for ink.
