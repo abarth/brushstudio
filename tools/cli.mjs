@@ -72,6 +72,10 @@ const USAGE = `brushstudio — a harness for designing Photoshop brushes
   compare <brush.json…> --ref A.abr[#name]
                                         one plate holding design and reference
   inspect <file.abr>                    read a Photoshop pack apart
+  inspect <file.abr> --dump [n]         the raw descriptor, key by key
+  inspect <file.abr> --against B.abr[#n]
+                                        which keys a reference pack has that this file
+                                        does not, and where their types differ
   export  <brush.json… | pack.json>     write a .abr, then read it back to check
 
 Common flags
@@ -250,6 +254,43 @@ async function main() {
           : flag('only')
         : undefined;
 
+      if (flags.has('against')) {
+        // what a pack Photoshop wrote has that our file does not
+        const ref = parseRef(String(flag('against')), assets);
+        const refBytes = Buffer.from(assets[ref.abr].data, 'base64');
+        const diff = await run((h) => h.compareAbrDescriptors(bytes, refBytes, {
+          ours: only,
+          reference: ref.brush,
+        }));
+        console.log(
+          `[${diff.ours.index}] ${diff.ours.name} (${diff.ours.classId})  vs  ` +
+            `${ref.label} [${diff.reference.index}] ${diff.reference.name} ` +
+            `(${diff.reference.classId})`,
+        );
+        const section = (title, rows, line) => {
+          if (!rows.length) return;
+          console.log(`\n  ${title} (${rows.length})`);
+          for (const r of rows) console.log(`    ${line(r)}`);
+        };
+        section('only in the reference', diff.onlyInReference, (r) => `${r.key.padEnd(38)} ${r.type}`);
+        section('only in ours', diff.onlyInOurs, (r) => `${r.key.padEnd(38)} ${r.type}`);
+        section('same key, different type', diff.differing,
+          (r) => `${r.key.padEnd(38)} reference ${r.reference} · ours ${r.ours}`);
+        if (!diff.onlyInReference.length && !diff.onlyInOurs.length && !diff.differing.length) {
+          console.log('\n  the two descriptors have the same shape');
+        }
+        break;
+      }
+
+      if (flags.has('dump')) {
+        // the raw descriptor, for holding this file next to another one
+        const which = flag('dump');
+        const index = which === true ? undefined : Number(which);
+        const lines = await run((h) => h.dumpAbr(bytes, index));
+        console.log(lines.join('\n'));
+        break;
+      }
+
       const { report, tipSheet, plate } = await run(async (h) => {
         const report = await h.inspectAbr(bytes, basename(path));
         const extra = {};
@@ -284,8 +325,12 @@ async function main() {
         `${report.brushes.length} brush(es), ${report.tips.length} tip(s), ` +
           `${report.patterns.length} pattern(s)\n`,
       );
+      const TOOLS = { PbTl: 'brush', PcTl: 'pencil', ErTl: 'eraser', SmTl: 'smudge' };
       for (const b of report.brushes) {
-        console.log(`  [${b.index}] ${b.name}`);
+        // a preset saved with tool settings is bound to the tool in use at
+        // the time, and the plate paints every one of them as a brush
+        const tool = b.tool && b.tool !== 'PbTl' ? `  (${TOOLS[b.tool] ?? b.tool} preset)` : '';
+        console.log(`  [${b.index}] ${b.name}${tool}`);
         console.log(`      ${b.summary}`);
       }
       console.log('\ntips');
@@ -299,6 +344,24 @@ async function main() {
         console.log('\npatterns');
         for (const p of report.patterns) {
           console.log(`  ${p.id.slice(0, 10).padEnd(12)} ${String(p.size).padStart(4)}px  ${p.name}`);
+        }
+      }
+      if (report.issues.length) {
+        // A pack is the authority on the format, so what our reader refuses
+        // is worth seeing: a key at a type Photoshop does not use is a bug
+        // in our schema, and a key we never read is a feature we are missing.
+        const wrong = report.issues.filter((i) => i.kind !== 'unknown');
+        const unread = [...new Set(
+          report.issues.filter((i) => i.kind === 'unknown').map((i) => i.where),
+        )];
+        console.log('\ndescriptor issues');
+        for (const i of wrong.slice(0, 20)) {
+          console.log(`  [${i.brush}] ${i.where}: ${i.message}`);
+        }
+        if (wrong.length > 20) console.log(`  … and ${wrong.length - 20} more`);
+        if (unread.length) {
+          console.log(`  not read: ${unread.slice(0, 15).join(', ')}` +
+            (unread.length > 15 ? `, … (${unread.length} keys)` : ''));
         }
       }
       console.log("\nrun again with --json for every brush's settings as a patch");

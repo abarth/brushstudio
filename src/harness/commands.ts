@@ -1,4 +1,4 @@
-import { parseAbr } from '../brush/abr';
+import { descriptorShape, dumpDescriptor, parseAbr } from '../brush/abr';
 import { writeAbr } from '../brush/abrWrite';
 import { defaultBrush, makeBrush } from '../brush/defaults';
 import { registerPattern, registerTip } from '../brush/patterns';
@@ -175,6 +175,9 @@ export function inspectAbr(abr: string | Uint8Array | ArrayBuffer, path: string)
       return {
         index: i,
         name: b.name,
+        // which tool the preset was saved for; a smudge or eraser preset
+        // paints a different mark than the plate will show
+        tool: b.tool,
         tipId: b.tipId,
         texturePatternId: b.texturePatternId,
         summary: describeBrush(settings),
@@ -184,6 +187,84 @@ export function inspectAbr(abr: string | Uint8Array | ArrayBuffer, path: string)
     }),
     tips: tipStats,
     patterns: [...parsed.patterns].map(([id, p]) => ({ id, name: p.name, size: p.map.size })),
+    // What the file holds that Photoshop's format does not describe: a key
+    // at the wrong type, a descriptor at the wrong class, or a key we do not
+    // read at all. On someone else's pack this is the interesting part —
+    // it is the pack telling us where our schema is wrong or incomplete.
+    issues: parsed.issues,
+  };
+}
+
+/**
+ * Every brush's descriptor as text, for holding two files side by side: a
+ * pack Photoshop wrote and one we did, diffed key by key.
+ */
+export function dumpAbr(abr: string | Uint8Array | ArrayBuffer, only?: number) {
+  const parsed = parseAbr(toArrayBuffer(abr));
+  return parsed.brushes.flatMap((b, i) => {
+    if (only !== undefined && only !== i) return [];
+    return [
+      `[${i}] ${b.name} — ${b.raw ? b.raw.classId : '(no descriptor)'} {`,
+      ...(b.raw ? dumpDescriptor(b.raw) : []),
+      '}',
+    ];
+  });
+}
+
+/** Picks a brush out of a parsed pack by index, by name, or the first one. */
+function pickBrush(abr: string | Uint8Array | ArrayBuffer, want?: number | string) {
+  const parsed = parseAbr(toArrayBuffer(abr));
+  const index = parsed.brushes.findIndex((b, i) => {
+    if (want === undefined) return i === 0;
+    if (typeof want === 'string') return b.name.toLowerCase() === want.toLowerCase();
+    return i === want;
+  });
+  if (index < 0) throw new Error(`no brush ${JSON.stringify(want)} in that pack`);
+  return { index, brush: parsed.brushes[index] };
+}
+
+/** One brush's descriptor shape: every key path mapped to its type. */
+export function abrShape(abr: string | Uint8Array | ArrayBuffer, want?: number | string) {
+  const { brush } = pickBrush(abr, want);
+  return brush.raw ? descriptorShape(brush.raw) : {};
+}
+
+/**
+ * Holds one brush's descriptor against another's and reports the difference
+ * in shape: keys one file has and the other does not, and keys they share at
+ * different types.
+ *
+ * This is the question a reader cannot answer on its own. It reports a key at
+ * the wrong type, but a key we never write at all looks exactly like a key
+ * that is legitimately absent — and when a brush imports wrong with nothing
+ * reported, the missing key is the only place left to look.
+ */
+export function compareAbrDescriptors(
+  ours: string | Uint8Array | ArrayBuffer,
+  reference: string | Uint8Array | ArrayBuffer,
+  opts: { ours?: number | string; reference?: number | string } = {},
+) {
+  const a = pickBrush(ours, opts.ours);
+  const b = pickBrush(reference, opts.reference);
+  const shapeA = a.brush.raw ? descriptorShape(a.brush.raw) : {};
+  const shapeB = b.brush.raw ? descriptorShape(b.brush.raw) : {};
+  const side = (x: typeof a) => ({
+    index: x.index,
+    name: x.brush.name,
+    classId: x.brush.raw?.classId ?? '(none)',
+  });
+  return {
+    ours: side(a),
+    reference: side(b),
+    onlyInReference: Object.keys(shapeB)
+      .filter((k) => !(k in shapeA))
+      .map((key) => ({ key, type: shapeB[key] })),
+    onlyInOurs: Object.keys(shapeA)
+      .filter((k) => !(k in shapeB))
+      .map((key) => ({ key, type: shapeA[key] })),
+    differing: Object.keys(shapeA)
+      .filter((k) => k in shapeB && shapeA[k] !== shapeB[k])
+      .map((key) => ({ key, ours: shapeA[key], reference: shapeB[key] })),
   };
 }
 
@@ -193,7 +274,12 @@ export async function exportAbr(docs: BrushDoc[], assets: AssetBag, ctx: Command
   const brushes = resolved.map((r) => ({ name: r.name, settings: r.settings }));
   const buffer = writeAbr(brushes);
   const back = parseAbr(buffer);
-  const issues: string[] = [];
+  // Reading our own bytes with a strict reader is what makes this check
+  // worth anything: a value at a type Photoshop would refuse now comes back
+  // as an issue instead of arriving unwrapped and looking correct.
+  const issues: string[] = back.issues
+    .filter((i) => i.kind !== 'unknown')
+    .map((i) => `${i.brush >= 0 ? `[${i.brush}] ` : ''}${i.where}: ${i.message}`);
   const near = (a: number, b: number, tol: number, what: string, i: number) => {
     if (Math.abs(a - b) > tol) issues.push(`[${i}] ${what}: wrote ${a}, read ${b}`);
   };
@@ -217,8 +303,12 @@ export async function exportAbr(docs: BrushDoc[], assets: AssetBag, ctx: Command
     eq(s.dual.enabled, g.dual.enabled, 'dual.enabled', i);
     eq(s.texture.enabled, g.texture.enabled, 'texture.enabled', i);
     eq(s.transfer.enabled, g.transfer.enabled, 'transfer.enabled', i);
-    near(s.flow, g.flow, 1e-5, 'flow', i);
-    near(s.opacity, g.opacity, 1e-5, 'opacity', i);
+    // the options bar holds whole percentages, so half a percent is the
+    // tightest these three can round-trip: anything worse is a lost value,
+    // not a rounded one
+    near(s.flow, g.flow, 0.005, 'flow', i);
+    near(s.opacity, g.opacity, 0.005, 'opacity', i);
+    near(s.smoothing, g.smoothing, 0.005, 'smoothing', i);
     eq(s.blendMode, g.blendMode, 'blendMode', i);
     if (s.tip.shape !== 'round' && (!got.tipId || !back.tips.has(got.tipId))) {
       issues.push(`[${i}] sampled tip did not survive the round trip`);

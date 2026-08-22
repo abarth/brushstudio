@@ -114,6 +114,9 @@ export async function exportAbr(
 }
 
 export const inspectAbr = commands.inspectAbr;
+export const dumpAbr = commands.dumpAbr;
+export const compareAbrDescriptors = commands.compareAbrDescriptors;
+export const abrShape = commands.abrShape;
 export const abrEntries = commands.abrEntries;
 
 export async function renderEntries(

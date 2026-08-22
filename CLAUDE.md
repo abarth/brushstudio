@@ -19,7 +19,6 @@ Then, as needed:
 | `docs/brush-format.md` | the brush document format |
 | `docs/abr.md` | studying and shipping Photoshop packs |
 | `docs/backends.md` | the two renderers, and when the default is the wrong one |
-| `docs/provenance.md` | what came from northlight, and how to keep it in sync |
 
 ## Commands
 
@@ -60,9 +59,6 @@ whole pack; `docs/backends.md` explains the split and why that matters.
 * **One or two parameters per iteration**, with `--seed` held fixed. The
   ratios in `docs/parameters.md` interact; a four-parameter change that
   improves the plate teaches nothing.
-* **`src/brush/` and `src/gpu/` are extracted verbatim.** Fix a
-  Photoshop-parity bug there only with a matching upstream fix in mind, and
-  note it in `docs/provenance.md`.
 * **The panel is a table.** Every control in the try-out app is one row of
   `web/groups.ts`, with the hint and the section's ratio beside it. `npm
   test` fails when a `BrushSettings` field has no row, so a new knob goes

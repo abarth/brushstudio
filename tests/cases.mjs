@@ -256,6 +256,251 @@ export async function runCases(BS, backend = 'cpu') {
     assert(result.bytes > 0, 'the writer produced no bytes');
   });
 
+  await test('every value is written at the type Photoshop stores it at', async () => {
+    // Two panels, two conventions, and the file has to match both: the Brush
+    // Settings panel keeps percentages as '#Prc' unit floats, while
+    // toolOptions mirrors the options bar, where Opacity, Flow and Smoothing
+    // are whole integers — Photoshop's own scripting API reads those back
+    // with getInteger. The reader refuses a value at the wrong type now, so
+    // the round trip below catches most of this; the bytes are what pin the
+    // unit, which nothing else can see. docs/abr.md carries the whole table.
+    const written = await BS.exportAbr([doc({
+      tip: { size: 33, hardness: 0.5, spacing: 0.2, roundness: 0.75, angle: 30 },
+      flow: 0.4,
+      opacity: 0.8,
+      smoothing: 0.2,
+    })], {});
+    const bytes = typeof written.abr === 'string'
+      ? Uint8Array.from(atob(written.abr), (c) => c.charCodeAt(0))
+      : new Uint8Array(written.abr);
+    // a descriptor key is u32 length + ascii, where a four-character key
+    // writes its length as 0; the type follows, and a unit float its unit
+    const typeOf = (key) => {
+      const len = key.length === 4 ? 0 : key.length;
+      const needle = [len >> 24 & 255, len >> 16 & 255, len >> 8 & 255, len & 255,
+        ...[...key].map((c) => c.charCodeAt(0))];
+      for (let i = 0; i + needle.length + 8 <= bytes.length; i++) {
+        if (needle.every((b, k) => bytes[i + k] === b)) {
+          const at = i + needle.length;
+          const type = String.fromCharCode(...bytes.subarray(at, at + 4));
+          return type === 'UntF'
+            ? type + String.fromCharCode(...bytes.subarray(at + 4, at + 8))
+            : type;
+        }
+      }
+      return 'missing';
+    };
+    const expected = {
+      Dmtr: 'UntF#Pxl',
+      Hrdn: 'UntF#Prc',
+      Angl: 'UntF#Ang',
+      Rndn: 'UntF#Prc',
+      Spcn: 'UntF#Prc',
+      minimumDiameter: 'UntF#Prc',
+      flow: 'long',
+      Opct: 'long',
+      Smoo: 'long',
+      smoothingValue: 'doub',
+      textureBrightness: 'missing', // no texture on this brush
+    };
+    for (const [key, want] of Object.entries(expected)) {
+      assert(typeOf(key) === want, `${key} was written as ${typeOf(key)}, wanted ${want}`);
+    }
+    assert(written.issues.length === 0, written.issues.join('; '));
+  });
+
+  await test('the descriptor has the shape of one Photoshop wrote', async () => {
+    // Transcribed from `inspect --dump 0` of a pack Photoshop itself wrote:
+    // a computed round brush, Shape Dynamics on, every other section off, and
+    // the options bar set. Types only — two brushes share no values — so what
+    // this pins is the schema: every key Photoshop writes, at the type it
+    // writes it, and nothing it does not write. It is the check that caught
+    // us omitting the five smoothing booleans and naming a computed tip.
+    const dyn = (name) => ({
+      [name]: 'Objc brVr',
+      [`${name}.bVTy`]: 'long',
+      [`${name}.fStp`]: 'long',
+      [`${name}.jitter`]: 'UntF #Prc',
+      [`${name}.Mnm`]: 'UntF #Prc',
+    });
+    const PHOTOSHOP = {
+      Nm: 'TEXT',
+      Brsh: 'Objc computedBrush',
+      'Brsh.Dmtr': 'UntF #Pxl',
+      'Brsh.Hrdn': 'UntF #Prc',
+      'Brsh.Angl': 'UntF #Ang',
+      'Brsh.Rndn': 'UntF #Prc',
+      'Brsh.Spcn': 'UntF #Prc',
+      'Brsh.Intr': 'bool',
+      'Brsh.flipX': 'bool',
+      'Brsh.flipY': 'bool',
+      useTipDynamics: 'bool',
+      flipX: 'bool',
+      flipY: 'bool',
+      brushProjection: 'bool',
+      minimumDiameter: 'UntF #Prc',
+      minimumRoundness: 'UntF #Prc',
+      tiltScale: 'UntF #Prc',
+      ...dyn('szVr'),
+      ...dyn('angleDynamics'),
+      ...dyn('roundnessDynamics'),
+      useScatter: 'bool',
+      dualBrush: 'Objc dualBrush',
+      'dualBrush.useDualBrush': 'bool',
+      brushGroup: 'Objc brushGroup',
+      'brushGroup.useBrushGroup': 'bool',
+      useTexture: 'bool',
+      usePaintDynamics: 'bool',
+      useColorDynamics: 'bool',
+      Wtdg: 'bool',
+      Nose: 'bool',
+      Rpt: 'bool',
+      useBrushSize: 'bool',
+      useBrushPose: 'bool',
+      toolOptions: 'Objc PbTl',
+      'toolOptions.brushPreset': 'bool',
+      'toolOptions.flow': 'long',
+      'toolOptions.Smoo': 'long',
+      'toolOptions.Md': 'enum',
+      'toolOptions.Opct': 'long',
+      'toolOptions.smoothing': 'bool',
+      'toolOptions.smoothingValue': 'doub',
+      'toolOptions.smoothingRadiusMode': 'bool',
+      'toolOptions.smoothingCatchup': 'bool',
+      'toolOptions.smoothingCatchupAtEnd': 'bool',
+      'toolOptions.smoothingZoomCompensation': 'bool',
+      'toolOptions.pressureSmoothing': 'bool',
+      'toolOptions.usePressureOverridesSize': 'bool',
+      'toolOptions.usePressureOverridesOpacity': 'bool',
+      'toolOptions.useLegacy': 'bool',
+    };
+
+    // the same brush: round tip, Shape Dynamics on, nothing else
+    const written = await BS.exportAbr([doc({
+      tip: { size: 175, hardness: 1, spacing: 0.05 },
+      shape: { enabled: true },
+      flow: 0.1,
+      opacity: 0.8,
+      smoothing: 0,
+    })], {});
+    const ours = BS.abrShape(written.abr);
+
+    const wrong = Object.keys(PHOTOSHOP)
+      .filter((k) => ours[k] !== PHOTOSHOP[k])
+      .map((k) => `${k}: Photoshop ${PHOTOSHOP[k]}, ours ${ours[k] ?? 'missing'}`);
+    const extra = Object.keys(ours).filter((k) => !(k in PHOTOSHOP));
+    assert(!wrong.length, wrong.join('; '));
+    assert(!extra.length, `keys Photoshop does not write: ${extra.join(', ')}`);
+  });
+
+  await test('two descriptors can be held against each other by shape', async () => {
+    // The one question a reader cannot answer about itself: a key at the
+    // wrong type gets reported, but a key we never write looks exactly like
+    // one that is legitimately absent. Comparing shapes is what shows it.
+    const plain = await BS.exportAbr([doc({ tip: { size: 20 } })], {});
+    const textured = await BS.exportAbr([doc({
+      tip: { size: 20 },
+      texture: { enabled: true, pattern: 'paper', depth: 0.4 },
+    })], {});
+
+    const same = BS.compareAbrDescriptors(plain.abr, plain.abr);
+    assert(
+      !same.onlyInReference.length && !same.onlyInOurs.length && !same.differing.length,
+      'a file came out different from itself',
+    );
+
+    const diff = BS.compareAbrDescriptors(plain.abr, textured.abr);
+    const missing = diff.onlyInReference.map((r) => r.key);
+    assert(missing.includes('textureScale'), `reference-only keys were ${missing.join(', ')}`);
+    assert(missing.includes('Txtr.Idnt'), `reference-only keys were ${missing.join(', ')}`);
+    assert(!diff.onlyInOurs.length, `ours had extra keys: ${JSON.stringify(diff.onlyInOurs)}`);
+  });
+
+  await test('a preset saved for another tool is read, not refused', async () => {
+    // Saving a preset with tool settings binds it to the tool in use, and the
+    // class of toolOptions is which tool that was: a real pack carries
+    // smudge, eraser and pencil presets beside the brushes. They are ordinary
+    // presets and have to read as such — only the mark they make differs.
+    const written = await BS.exportAbr([doc({ flow: 0.4 })], {});
+    const bytes = typeof written.abr === 'string'
+      ? Uint8Array.from(atob(written.abr), (c) => c.charCodeAt(0))
+      : new Uint8Array(written.abr);
+    const n = [...'PbTl'].map((c) => c.charCodeAt(0));
+    let at = -1;
+    for (let i = 0; i + 4 <= bytes.length && at < 0; i++) {
+      if (n.every((b, k) => bytes[i + k] === b)) at = i;
+    }
+    assert(at >= 0, 'the toolOptions class was not written');
+    bytes.set([...'SmTl'].map((c) => c.charCodeAt(0)), at); // same length, no reflow
+
+    const report = BS.inspectAbr(bytes, 'smudge.abr');
+    assert(
+      !report.issues.some((i) => i.kind === 'class'),
+      `a tool class was refused: ${JSON.stringify(report.issues)}`,
+    );
+    assert(report.brushes[0].tool === 'SmTl', `tool came back ${report.brushes[0].tool}`);
+    assert(report.brushes[0].patch.flow === 0.4, 'the options bar was not read');
+  });
+
+  await test('a count survives as the double Photoshop stores it as', async () => {
+    // Count looks like an integer and is not one: a real pack stores it as a
+    // 'doub', and reading it as a long left every dual brush we imported
+    // sitting at a count of 1.
+    const written = await BS.exportAbr([doc({
+      scatter: { enabled: true, count: 4 },
+      dual: { enabled: true, shape: 'grain', count: 3, spacing: 0.3 },
+    })], {});
+    assert(written.issues.length === 0, written.issues.join('; '));
+    const { patch } = BS.inspectAbr(written.abr, 'counts.abr').brushes[0];
+    assert(patch.scatter.count === 4, `scatter count came back ${patch.scatter.count}`);
+    assert(patch.dual.count === 3, `dual count came back ${patch.dual.count}`);
+  });
+
+  await test('a value at the wrong type is refused, not unwrapped', async () => {
+    // Everything the round-trip check is worth rests on the reader being
+    // able to tell a value Photoshop would refuse from one it would read.
+    // Here the options-bar Flow is rewritten as a '#Prc' unit float — the
+    // type the Brush Settings panel uses, and the wrong one for this
+    // descriptor — and has to come back reported and unread, not quietly
+    // correct, which is what the old reader did with it.
+    const written = await BS.exportAbr([doc({ flow: 0.4 })], {});
+    const bytes = typeof written.abr === 'string'
+      ? Uint8Array.from(atob(written.abr), (c) => c.charCodeAt(0))
+      : new Uint8Array(written.abr);
+    const find = (needle) => {
+      const n = [...needle].map((c) => c.charCodeAt(0));
+      for (let i = 0; i + n.length <= bytes.length; i++) {
+        if (n.every((b, k) => bytes[i + k] === b)) return i;
+      }
+      return -1;
+    };
+    const at = find('\u0000\u0000\u0000\u0000flow') + 8; // just past the key
+    assert(bytes[at] === 0x6c, 'flow was not a long to begin with');
+
+    // 'long' + i32 is 8 bytes; 'UntF' + '#Prc' + f64 is 16
+    const swap = new Uint8Array(16);
+    swap.set([...'UntF#Prc'].map((c) => c.charCodeAt(0)));
+    new DataView(swap.buffer).setFloat64(8, 40);
+    const patched = new Uint8Array(bytes.length + 8);
+    patched.set(bytes.subarray(0, at));
+    patched.set(swap, at);
+    patched.set(bytes.subarray(at + 8), at + 16);
+    // the 'desc' section header carries its own length, and it sits before
+    // the bytes we grew
+    const descLen = find('8BIMdesc') + 8;
+    const view = new DataView(patched.buffer);
+    view.setUint32(descLen, view.getUint32(descLen) + 8);
+
+    const report = BS.inspectAbr(patched, 'patched.abr');
+    const issue = report.issues.find((i) => i.where === 'toolOptions.flow');
+    assert(issue, `no issue was reported: ${JSON.stringify(report.issues)}`);
+    assert(issue.kind === 'type', `issue was ${JSON.stringify(issue)}`);
+    assert(
+      report.brushes[0].patch.flow === undefined,
+      `the refused value was read anyway: ${report.brushes[0].patch.flow}`,
+    );
+  });
+
   await test('a sampled tip and a texture pattern are embedded', async () => {
     const result = await BS.exportAbr(
       [

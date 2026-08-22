@@ -20,6 +20,11 @@ import type { BlendMode } from '../types';
  * - descriptor and pattern strings are NUL-terminated UTF-16BE (Photoshop
  *   stores "Nm" of an 18-character name with a count of 19),
  * - pattern channels use the VirtualMemoryArrayList layout, maxChannels 24,
+ * - the Brush Settings panel stores percentages as unit floats ('UntF'
+ *   '#Prc') while the options bar in toolOptions stores Opacity, Flow and
+ *   Smoothing as plain integers — Photoshop's own scripting API reads that
+ *   descriptor back with getInteger, and the split is a property of the two
+ *   panels, not an inconsistency (see docs/abr.md for the whole table),
  * - and every descriptor is classed (see writeDesc).
  *
  * Round-tripping through parseAbr is covered in tests/gpu.spec.mjs.
@@ -151,9 +156,10 @@ type Entry = [string, Emit];
  * Every descriptor carries a class id naming what it is, and Photoshop needs
  * them: it rejects a file whose tip descriptor is not classed
  * `computedBrush` or `sampledBrush` with "unknown brush type" — the class IS
- * the brush type. A lenient reader (abr.ts included) discards class ids
- * entirely, so a round trip through the parser cannot catch a wrong one.
- * The ids used here were read out of a genuine Photoshop file: brushPreset
+ * the brush type. abr.ts keeps class ids and checks them, so the round trip
+ * in exportAbr does catch a wrong one; it could not when that reader threw
+ * them away. The ids used here were read out of a genuine Photoshop file:
+ * brushPreset
  * per brush, computedBrush/sampledBrush per tip, brVr on every dynamics
  * object, dualBrush, brushGroup, Ptrn on the texture, PbTl on toolOptions.
  */
@@ -172,6 +178,7 @@ const T = {
   text: (s: string): Emit => (w) => { w.ascii('TEXT').unicode(s); },
   bool: (v: boolean): Emit => (w) => { w.ascii('bool').u8(v ? 1 : 0); },
   long: (n: number): Emit => (w) => { w.ascii('long').i32(Math.round(n)); },
+  doub: (v: number): Emit => (w) => { w.ascii('doub').f64(v); },
   enm: (t: string, v: string): Emit => (w) => { w.ascii('enum').key(t).key(v); },
   objc: (items: Entry[], classId = 'null'): Emit => (w) => {
     w.ascii('Objc');
@@ -381,7 +388,9 @@ function tipDescriptor(
     ['Hrdn', T.untf('#Prc', pct(hardness))],
     ['Angl', T.untf('#Ang', angle)],
     ['Rndn', T.untf('#Prc', pct(roundness))],
-    ['Nm  ', T.text(String(shape))],
+    // a computed tip carries no name in a real file — its class is what it
+    // is; a sampled one is named for the bitmap it stands on
+    ...(uuid ? [['Nm  ', T.text(String(shape))] as Entry] : []),
     ['Spcn', T.untf('#Prc', pct(spacing))],
     ['Intr', T.bool(true)],
     ['flipX', T.bool(flipX)],
@@ -419,7 +428,9 @@ function brushPreset(
   if (s.scatter.enabled) {
     items.push(
       ['bothAxes', T.bool(s.scatter.bothAxes)],
-      ['Cnt ', T.long(s.scatter.count)],
+      // Count is a double in a real pack (verified in dualBrush; the
+      // Scattering panel's own Count is the same control, so it follows)
+      ['Cnt ', T.doub(s.scatter.count)],
       ['scatterDynamics', dyn(s.scatter.scatterControl, pct(s.scatter.scatter))],
       ['countDynamics', dyn({ source: 'off', fadeSteps: 1 }, pct(s.scatter.countJitter))],
     );
@@ -437,7 +448,7 @@ function brushPreset(
           ['BlnM', T.enm('BlnM', BLEND_ENUM[d.mode] ?? 'Mltp')],
           ['useScatter', T.bool(d.scatter > 0)],
           ['Spcn', T.untf('#Prc', pct(d.spacing))],
-          ['Cnt ', T.long(d.count)],
+          ['Cnt ', T.doub(d.count)],
           ['bothAxes', T.bool(d.bothAxes)],
           ['countDynamics', dyn({ source: 'off', fadeSteps: 1 }, pct(d.countJitter))],
           ['scatterDynamics', dyn({ source: 'off', fadeSteps: 25 }, pct(d.scatter))],
@@ -497,12 +508,29 @@ function brushPreset(
     ['useBrushPose', T.bool(false)],
     ['toolOptions', T.objc([
       ['brushPreset', T.bool(true)],
+      // The options bar keeps whole percentages: Photoshop's scripting API
+      // reads this descriptor back with getInteger('flow') / ('opacity'), so
+      // a unit float here is what gets dropped, not a long.
       ['flow', T.long(pct(s.flow))],
-      ['Smoo', T.long(0)],
+      // 'Smoo' is the char id for "smooth", the Smoothing amount itself. It
+      // was written as a constant 0, which told Photoshop to smooth nothing
+      // however the brush was designed; 'smoothingValue' mirrors the same
+      // number as a double over 255, and 'smoothing' is the on/off beside it.
+      ['Smoo', T.long(pct(s.smoothing))],
       ['Md  ', T.enm('BlnM', PAINT_MODE_ENUM[s.blendMode] ?? 'Nrml')],
       ['Opct', T.long(pct(s.opacity))],
+      // 'smoothing' is on in a real file even where the amount is 0, and the
+      // five booleans after it are Photoshop's own defaults for the feature:
+      // pulled-string off, catch-up on, catch-up-at-end off, zoom
+      // compensation on, pressure smoothing off. They are inert at amount 0
+      // and give the stock behaviour above it.
       ['smoothing', T.bool(true)],
-      ['smoothingValue', T.long(pct(s.smoothing))],
+      ['smoothingValue', T.doub(Math.round(s.smoothing * 255))],
+      ['smoothingRadiusMode', T.bool(false)],
+      ['smoothingCatchup', T.bool(true)],
+      ['smoothingCatchupAtEnd', T.bool(false)],
+      ['smoothingZoomCompensation', T.bool(true)],
+      ['pressureSmoothing', T.bool(false)],
       ['usePressureOverridesSize', T.bool(s.pressureSize)],
       ['usePressureOverridesOpacity', T.bool(s.pressureOpacity)],
       ['useLegacy', T.bool(false)],
