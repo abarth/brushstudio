@@ -20,9 +20,11 @@ import type { BlendMode } from '../types';
  * - descriptor and pattern strings are NUL-terminated UTF-16BE (Photoshop
  *   stores "Nm" of an 18-character name with a count of 19),
  * - pattern channels use the VirtualMemoryArrayList layout, maxChannels 24,
- * - percentages are unit floats ('UntF' '#Prc'), the options-bar Opacity and
- *   Flow in toolOptions included — Photoshop drops a percentage that arrives
- *   as a 'long' and paints with whatever the tool is currently set to,
+ * - the Brush Settings panel stores percentages as unit floats ('UntF'
+ *   '#Prc') while the options bar in toolOptions stores Opacity, Flow and
+ *   Smoothing as plain integers — Photoshop's own scripting API reads that
+ *   descriptor back with getInteger, and the split is a property of the two
+ *   panels, not an inconsistency (see docs/abr.md for the whole table),
  * - and every descriptor is classed (see writeDesc).
  *
  * Round-tripping through parseAbr is covered in tests/gpu.spec.mjs.
@@ -154,9 +156,10 @@ type Entry = [string, Emit];
  * Every descriptor carries a class id naming what it is, and Photoshop needs
  * them: it rejects a file whose tip descriptor is not classed
  * `computedBrush` or `sampledBrush` with "unknown brush type" — the class IS
- * the brush type. A lenient reader (abr.ts included) discards class ids
- * entirely, so a round trip through the parser cannot catch a wrong one.
- * The ids used here were read out of a genuine Photoshop file: brushPreset
+ * the brush type. abr.ts keeps class ids and checks them, so the round trip
+ * in exportAbr does catch a wrong one; it could not when that reader threw
+ * them away. The ids used here were read out of a genuine Photoshop file:
+ * brushPreset
  * per brush, computedBrush/sampledBrush per tip, brVr on every dynamics
  * object, dualBrush, brushGroup, Ptrn on the texture, PbTl on toolOptions.
  */
@@ -175,6 +178,7 @@ const T = {
   text: (s: string): Emit => (w) => { w.ascii('TEXT').unicode(s); },
   bool: (v: boolean): Emit => (w) => { w.ascii('bool').u8(v ? 1 : 0); },
   long: (n: number): Emit => (w) => { w.ascii('long').i32(Math.round(n)); },
+  doub: (v: number): Emit => (w) => { w.ascii('doub').f64(v); },
   enm: (t: string, v: string): Emit => (w) => { w.ascii('enum').key(t).key(v); },
   objc: (items: Entry[], classId = 'null'): Emit => (w) => {
     w.ascii('Objc');
@@ -500,16 +504,19 @@ function brushPreset(
     ['useBrushPose', T.bool(false)],
     ['toolOptions', T.objc([
       ['brushPreset', T.bool(true)],
-      // Opacity and Flow are percentages like every other one in the file,
-      // and abr.ts's num() unwraps a unit float and a long alike — so a round
-      // trip through our own parser cannot tell the two apart. The byte-level
-      // expectation in tests/cases.mjs is what holds these types in place.
-      ['flow', T.untf('#Prc', pct(s.flow))],
-      ['Smoo', T.long(0)],
+      // The options bar keeps whole percentages: Photoshop's scripting API
+      // reads this descriptor back with getInteger('flow') / ('opacity'), so
+      // a unit float here is what gets dropped, not a long.
+      ['flow', T.long(pct(s.flow))],
+      // 'Smoo' is the char id for "smooth", the Smoothing amount itself. It
+      // was written as a constant 0, which told Photoshop to smooth nothing
+      // however the brush was designed; 'smoothingValue' mirrors the same
+      // number as a double over 255, and 'smoothing' is the on/off beside it.
+      ['Smoo', T.long(pct(s.smoothing))],
       ['Md  ', T.enm('BlnM', PAINT_MODE_ENUM[s.blendMode] ?? 'Nrml')],
-      ['Opct', T.untf('#Prc', pct(s.opacity))],
-      ['smoothing', T.bool(true)],
-      ['smoothingValue', T.long(pct(s.smoothing))],
+      ['Opct', T.long(pct(s.opacity))],
+      ['smoothing', T.bool(s.smoothing > 0)],
+      ['smoothingValue', T.doub(Math.round(s.smoothing * 255))],
       ['usePressureOverridesSize', T.bool(s.pressureSize)],
       ['usePressureOverridesOpacity', T.bool(s.pressureOpacity)],
       ['useLegacy', T.bool(false)],

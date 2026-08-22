@@ -301,6 +301,24 @@ async function main() {
           console.log(`  ${p.id.slice(0, 10).padEnd(12)} ${String(p.size).padStart(4)}px  ${p.name}`);
         }
       }
+      if (report.issues.length) {
+        // A pack is the authority on the format, so what our reader refuses
+        // is worth seeing: a key at a type Photoshop does not use is a bug
+        // in our schema, and a key we never read is a feature we are missing.
+        const wrong = report.issues.filter((i) => i.kind !== 'unknown');
+        const unread = [...new Set(
+          report.issues.filter((i) => i.kind === 'unknown').map((i) => i.where),
+        )];
+        console.log('\ndescriptor issues');
+        for (const i of wrong.slice(0, 20)) {
+          console.log(`  [${i.brush}] ${i.where}: ${i.message}`);
+        }
+        if (wrong.length > 20) console.log(`  … and ${wrong.length - 20} more`);
+        if (unread.length) {
+          console.log(`  not read: ${unread.slice(0, 15).join(', ')}` +
+            (unread.length > 15 ? `, … (${unread.length} keys)` : ''));
+        }
+      }
       console.log("\nrun again with --json for every brush's settings as a patch");
       break;
     }

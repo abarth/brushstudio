@@ -52,14 +52,97 @@ checked per brush: name, tip geometry, the enabled state of every dynamics
 section, flow, opacity, blend mode, and that sampled tips and patterns
 resolve.
 
-That check has one blind spot worth knowing about, because a clean report is
-not the same as a file Photoshop will read. Our reader is deliberately
-lenient — it discards descriptor class ids, and its `num()` unwraps a unit
-float and an integer alike — so a value written at the *wrong type* comes
-back looking perfect while Photoshop drops the key. Opacity and Flow were
-exactly that bug once (see `docs/provenance.md`). Anything the round trip
-cannot see is pinned by reading the bytes directly in `tests/cases.mjs`, and
-that is where an expectation about types or class ids belongs.
+The reader it goes through is strict, which is what makes the check worth
+anything: a value at a type Photoshop would refuse comes back as an issue
+rather than arriving unwrapped and looking correct, and a descriptor at the
+wrong class id is reported the same way. What a round trip still cannot see
+is a key Photoshop wants that we never write — an absent key is not an error
+to either side — and the *unit* on a value, since our reader and writer would
+have to disagree about it for that to show. Those are pinned by reading the
+bytes directly in `tests/cases.mjs`, against the table below.
+
+## The descriptor we write
+
+There is no Adobe documentation for this part of the format. The key names
+below came out of real files; the types come from Photoshop's own scripting
+API, which reads and writes these same descriptors through `getInteger`,
+`getUnitDouble` and friends, and a key at the wrong type is a key Photoshop
+refuses rather than a near miss.
+
+One rule governs the whole table: **the Brush Settings panel stores
+percentages as `UntF` `#Prc` unit floats, and the options bar stores whole
+integers.** `toolOptions` is the options bar, which is why Opacity, Flow and
+Smoothing are the only percentages in the file that are not unit floats — it
+reads like an inconsistency and is not one.
+
+**The tip** — `Brsh`, classed `computedBrush` or `sampledBrush`. Photoshop
+rejects a tip at any other class with "unknown brush type".
+
+| key | type | is |
+| --- | --- | --- |
+| `Dmtr` | `UntF #Pxl` | size, in pixels — *not* a percentage |
+| `Hrdn` `Rndn` `Spcn` | `UntF #Prc` | hardness, roundness, spacing |
+| `Angl` | `UntF #Ang` | angle, in degrees |
+| `Intr` `flipX` `flipY` | `bool` | spacing on, and the tip's own flips |
+| `Nm  ` `sampledData` | `TEXT` | name, and the `samp` uuid on a sampled tip |
+
+**The preset** — classed `brushPreset`, one per brush.
+
+| key | type | is |
+| --- | --- | --- |
+| `use*` (`useTipDynamics`, `useScatter`, `useTexture`, `usePaintDynamics`, `useColorDynamics`) | `bool` | the section switches |
+| `minimumDiameter` `minimumRoundness` `tiltScale` | `UntF #Prc` | Shape Dynamics floors |
+| `szVr` `angleDynamics` `roundnessDynamics` `scatterDynamics` `countDynamics` `opVr` `prVr` `clVr` `textureDepthDynamics` | `Objc` classed `brVr` | one dynamics object each |
+| `bVTy` `fStp` | `long` | inside `brVr`: control source, fade steps |
+| `jitter` `Mnm ` | `UntF #Prc` | inside `brVr`: the jitter and its minimum |
+| `Cnt ` | `long` | scatter count, a count not a percentage |
+| `textureScale` `textureDepth` `minimumDepth` | `UntF #Prc` | Texture amounts |
+| `textureBrightness` `textureContrast` | `long` | the Texture panel's integer sliders (-150..150, -50..100) |
+| `textureBlendMode` `BlnM` `Md  ` | `enum` `BlnM` | blend modes |
+| `H   ` `Strt` `Brgh` `purity` | `UntF #Prc` | Color Dynamics |
+| `Wtdg` `Nose` `Rpt ` | `bool` | wet edges, noise, airbrush |
+
+**The options bar** — `toolOptions`, classed `PbTl`.
+
+| key | type | is | evidence |
+| --- | --- | --- | --- |
+| `Opct` | `long` | Opacity, 0..100 | `getInteger(stringIDToTypeID('opacity'))` |
+| `flow` | `long` | Flow, 0..100 | `getInteger(stringIDToTypeID('flow'))` |
+| `Smoo` | `long` | Smoothing amount, 0..100 | `putInteger(stringIDToTypeID('smooth'), n)` |
+| `smoothingValue` | `doub` | the same amount over 255 | `putDouble(…'smoothingValue', n / 100 * 255)` |
+| `smoothing` | `bool` | smoothing on | |
+| `Md  ` | `enum` `BlnM` | paint blend mode | |
+| `usePressureOverridesSize` / `…Opacity` | `bool` | the pressure override buttons | |
+
+**Still unsettled**, and marked here so nobody re-derives it from scratch:
+
+* `smoothingValue`'s 0..255 scale rests on one Adobe forum recipe, not on a
+  file anyone here has read. `Smoo` is written and read first, so the scale
+  only matters if Photoshop prefers the other key.
+* `textureBrightness` and `textureContrast` as `long` is inferred from the
+  sliders being integers in the UI, not from a documented type.
+* Whether Photoshop applies a preset's `toolOptions` on import at all is a
+  separate question from the types: a brush preset only restores the options
+  bar when it was saved with **Include Tool Settings**, and which key records
+  that choice is not documented anywhere we could find.
+
+Any pack in `refs/` can settle all three — see below.
+
+## What a pack can tell you
+
+`inspect` reports what the reader refused, which is the fastest way to check
+this table against a file Photoshop itself wrote:
+
+```bash
+npm run brush -- inspect refs/SomePack.abr        # a `descriptor issues` section, when there is one
+npm run brush -- inspect refs/SomePack.abr --json # every issue, structured
+```
+
+Three kinds show up there. A **type** or **class** issue on a real pack means
+our table is wrong and should be corrected — Photoshop wrote that file, so it
+is right by definition. A **not read** list names keys the pack carries that
+we do not model; that is where a missing feature announces itself, and where
+an undocumented flag like *Include Tool Settings* would appear if it exists.
 
 ## What does not cross over
 

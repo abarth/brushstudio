@@ -41,6 +41,8 @@ export interface AbrResult {
   tips: Map<string, GrayMap>;
   patterns: Map<string, AbrPattern>;
   brushes: AbrBrush[];
+  /** everything in the file that is not what Photoshop's format says */
+  issues: AbrIssue[];
 }
 
 class Reader {
@@ -259,37 +261,46 @@ function readSampledBitmap(r: Reader): GrayMap | null {
 // ---------------------------------------------------------------------------
 
 type DescValue =
-  | number
-  | boolean
-  | string
-  | null
-  | { unit: string; value: number }
-  | { enumType: string; enumValue: string }
-  | DescValue[]
-  | Descriptor;
+  | { t: 'long'; v: number }
+  | { t: 'doub'; v: number }
+  | { t: 'unit'; unit: string; v: number }
+  | { t: 'bool'; v: boolean }
+  | { t: 'text'; v: string }
+  | { t: 'enum'; enumType: string; v: string }
+  | { t: 'desc'; v: Descriptor }
+  | { t: 'list'; v: DescValue[] }
+  /** in the file, but of a type nothing here models */
+  | { t: 'other'; osType: string };
 
+/**
+ * A parsed descriptor keeps its class id: Photoshop uses it to name what the
+ * descriptor *is* — a tip classed neither `computedBrush` nor `sampledBrush`
+ * is rejected as an unknown brush type — so a reader that drops it cannot
+ * tell a file Photoshop will open from one it will refuse.
+ */
 interface Descriptor {
-  [key: string]: DescValue;
+  classId: string;
+  fields: Record<string, DescValue>;
 }
 
 function parseDescriptor(r: Reader): Descriptor {
   r.unicode(); // class name
-  r.key(); // class id
+  const classId = r.key();
   const count = r.u32();
-  const out: Descriptor = {};
+  const fields: Record<string, DescValue> = {};
   for (let i = 0; i < count; i++) {
     const key = r.key();
     const type = r.ascii(4);
-    out[key] = parseValue(r, type);
+    fields[key] = parseValue(r, type);
   }
-  return out;
+  return { classId, fields };
 }
 
 function parseValue(r: Reader, type: string): DescValue {
   switch (type) {
     case 'Objc':
     case 'GlbO':
-      return parseDescriptor(r);
+      return { t: 'desc', v: parseDescriptor(r) };
     case 'VlLs': {
       const n = r.u32();
       const items: DescValue[] = [];
@@ -297,41 +308,41 @@ function parseValue(r: Reader, type: string): DescValue {
         const t = r.ascii(4);
         items.push(parseValue(r, t));
       }
-      return items;
+      return { t: 'list', v: items };
     }
     case 'doub':
-      return r.f64();
+      return { t: 'doub', v: r.f64() };
     case 'UntF': {
       const unit = r.ascii(4);
-      return { unit, value: r.f64() };
+      return { t: 'unit', unit, v: r.f64() };
     }
     case 'TEXT':
-      return r.unicode();
+      return { t: 'text', v: r.unicode() };
     case 'enum': {
       const enumType = r.key();
       const enumValue = r.key();
-      return { enumType, enumValue };
+      return { t: 'enum', enumType, v: enumValue };
     }
     case 'long':
-      return r.i32();
+      return { t: 'long', v: r.i32() };
     case 'comp': {
       const hi = r.u32();
       const lo = r.u32();
-      return hi * 0x100000000 + lo;
+      return { t: 'doub', v: hi * 0x100000000 + lo };
     }
     case 'bool':
-      return r.u8() !== 0;
+      return { t: 'bool', v: r.u8() !== 0 };
     case 'type':
     case 'GlbC':
       r.unicode();
       r.key();
-      return null;
+      return { t: 'other', osType: type };
     case 'alis':
     case 'tdta':
     case 'Pth ': {
       const n = r.u32();
       r.skip(n);
-      return null;
+      return { t: 'other', osType: type };
     }
     case 'obj ': {
       const n = r.u32();
@@ -371,7 +382,7 @@ function parseValue(r: Reader, type: string): DescValue {
             throw new Error(`unknown reference type ${t}`);
         }
       }
-      return null;
+      return { t: 'other', osType: type };
     }
     default:
       throw new Error(`unknown descriptor type ${type}`);
@@ -381,51 +392,155 @@ function parseValue(r: Reader, type: string): DescValue {
 // ---------------------------------------------------------------------------
 // Descriptor -> BrushSettings mapping
 //
-// Key names below were observed in real files (MB Starter Pack, Evenant,
+// Key names were observed in real files (MB Starter Pack, Evenant,
 // Pixelstains, spray brushes — see tests for URLs). Notably:
 // - scatter lives in scatterDynamics/countDynamics/bothAxes/'Cnt '
 // - texture uses textureScale/textureBlendMode/textureDepth/InvT/TxtC/
 //   textureBrightness/textureContrast/textureDepthDynamics + Txtr.Idnt
 // - useDualBrush is nested INSIDE the dualBrush descriptor
 // - transfer: opVr = opacity variance, prVr = flow variance
-// - toolOptions: Opct/flow/Md/smoothingValue/usePressureOverridesSize/
-//   usePressureOverridesOpacity
+// - toolOptions: Opct/flow/Smoo/Md/smoothing/smoothingValue/
+//   usePressureOverridesSize/usePressureOverridesOpacity
+//
+// Every key is read at the one type Photoshop stores it at; the table of
+// those types, and what each is evidenced by, is in docs/abr.md. The split
+// that governs it: the Brush Settings panel keeps percentages as '#Prc' unit
+// floats, while toolOptions mirrors the options bar, where Opacity, Flow and
+// Smoothing are whole integers.
 // ---------------------------------------------------------------------------
 
-const isDesc = (v: DescValue | undefined): v is Descriptor =>
-  v !== null && typeof v === 'object' && !Array.isArray(v) && !('unit' in v) && !('enumType' in v);
-
-/** Narrowing helper: returns the value when it is a nested descriptor. */
-function desc(v: DescValue | undefined): Descriptor | undefined {
-  return isDesc(v) ? v : undefined;
-}
-
-function num(v: DescValue | undefined): number | undefined {
-  if (typeof v === 'number') return v;
-  if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
-    const value = (v as { value?: unknown }).value;
-    if (typeof value === 'number') return value;
-  }
-  return undefined;
-}
-
-function bool(v: DescValue | undefined): boolean | undefined {
-  return typeof v === 'boolean' ? v : undefined;
-}
-
-function str(v: DescValue | undefined): string | undefined {
-  return typeof v === 'string' ? v : undefined;
-}
-
-function enumVal(v: DescValue | undefined): string | undefined {
-  if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
-    const enumValue = (v as { enumValue?: unknown }).enumValue;
-    if (typeof enumValue === 'string') return enumValue;
-  }
-  return undefined;
+/** Something in the file that is not what Photoshop's own format says. */
+export interface AbrIssue {
+  /** index of the brush it was found in, or -1 for the file itself */
+  brush: number;
+  /** dotted path to the key, e.g. `toolOptions.Opct` */
+  where: string;
+  kind: 'type' | 'class' | 'unknown';
+  message: string;
 }
 
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
+
+/** What a value would be written as, for an issue message. */
+function typeName(v: DescValue): string {
+  switch (v.t) {
+    case 'long': return 'long';
+    case 'doub': return 'doub';
+    case 'unit': return `UntF ${v.unit}`;
+    case 'bool': return 'bool';
+    case 'text': return 'TEXT';
+    case 'enum': return 'enum';
+    case 'desc': return 'Objc';
+    case 'list': return 'VlLs';
+    default: return v.osType;
+  }
+}
+
+/**
+ * A typed view over one descriptor.
+ *
+ * Photoshop refuses a key that arrives at the wrong type, and so does this.
+ * Each accessor names the type it wants — and the unit, where there is one —
+ * and anything else is left at its default and recorded, rather than quietly
+ * coerced into looking correct. A lenient reader cannot tell a file
+ * Photoshop will honour from one it will ignore, which is precisely the
+ * question this reader exists to answer.
+ *
+ * `unknown()` reports the other direction: keys a file carries that nothing
+ * here models. On someone else's pack that list is how it tells us what we
+ * are not reading yet.
+ */
+class Fields {
+  constructor(
+    private readonly d: Descriptor,
+    private readonly path: string,
+    private readonly issues: AbrIssue[],
+    private readonly index: number,
+  ) {}
+
+  private note(kind: AbrIssue['kind'], key: string, message: string): void {
+    const where = key ? `${this.path ? `${this.path}.` : ''}${key}` : this.path || '(brush)';
+    this.issues.push({ brush: this.index, where, kind, message });
+  }
+
+  /** The value at `key` when it is stored as `want`; reports when it is not. */
+  private typed<K extends DescValue['t']>(
+    key: string,
+    want: K,
+    wantName: string,
+  ): Extract<DescValue, { t: K }> | undefined {
+    const v = this.d.fields[key];
+    if (v === undefined) return undefined;
+    if (v.t !== want) {
+      this.note('type', key, `expected ${wantName}, got ${typeName(v)}`);
+      return undefined;
+    }
+    return v as Extract<DescValue, { t: K }>;
+  }
+
+  private unitValue(key: string, unit: string): number | undefined {
+    const v = this.typed(key, 'unit', `UntF ${unit}`);
+    if (!v) return undefined;
+    if (v.unit !== unit) {
+      this.note('type', key, `expected UntF ${unit}, got UntF ${v.unit}`);
+      return undefined;
+    }
+    return v.v;
+  }
+
+  /** A percentage, returned on the 0..100 scale the file stores. */
+  pct(key: string): number | undefined {
+    return this.unitValue(key, '#Prc');
+  }
+
+  px(key: string): number | undefined {
+    return this.unitValue(key, '#Pxl');
+  }
+
+  ang(key: string): number | undefined {
+    return this.unitValue(key, '#Ang');
+  }
+
+  int(key: string): number | undefined {
+    return this.typed(key, 'long', 'long')?.v;
+  }
+
+  dbl(key: string): number | undefined {
+    return this.typed(key, 'doub', 'doub')?.v;
+  }
+
+  flag(key: string): boolean | undefined {
+    return this.typed(key, 'bool', 'bool')?.v;
+  }
+
+  text(key: string): string | undefined {
+    return this.typed(key, 'text', 'TEXT')?.v;
+  }
+
+  enm(key: string): string | undefined {
+    return this.typed(key, 'enum', 'enum')?.v;
+  }
+
+  /** A nested descriptor, checked against the class ids Photoshop uses. */
+  obj(key: string, ...classIds: string[]): Fields | undefined {
+    const v = this.typed(key, 'desc', 'Objc');
+    if (!v) return undefined;
+    const path = this.path ? `${this.path}.${key}` : key;
+    if (classIds.length > 0 && !classIds.includes(v.v.classId)) {
+      this.note('class', key, `expected class ${classIds.join(' or ')}, got ${v.v.classId || '(none)'}`);
+    }
+    return new Fields(v.v, path, this.issues, this.index);
+  }
+
+  /** Reports every key this descriptor carries that we do not read. */
+  unknown(known: string[]): void {
+    for (const key of Object.keys(this.d.fields)) {
+      if (!known.includes(key)) {
+        this.note('unknown', key, `not read (${typeName(this.d.fields[key])})`);
+      }
+    }
+  }
+}
 
 /**
  * bVTy control values. Empirically validated table:
@@ -442,23 +557,24 @@ const CONTROL_MAP: DynamicControl['source'][] = [
   'initial-direction', 'direction', 'rotation',
 ];
 
-function mapControl(d: Descriptor | undefined): {
+function mapControl(f: Fields | undefined): {
   control: DynamicControl;
   jitter: number;
   minimum: number;
 } {
-  if (!d) {
+  if (!f) {
     return { control: { source: 'off', fadeSteps: 25 }, jitter: 0, minimum: 0 };
   }
-  const idx = num(d['bVTy']) ?? 0;
+  f.unknown(['bVTy', 'fStp', 'jitter', 'Mnm']);
+  const idx = f.int('bVTy') ?? 0;
   return {
     control: {
       source: CONTROL_MAP[idx] ?? 'off',
-      fadeSteps: Math.max(1, num(d['fStp']) ?? 25),
+      fadeSteps: Math.max(1, f.int('fStp') ?? 25),
     },
     // raw fraction; most consumers clamp to 0..1 but scatter can reach 10
-    jitter: Math.max(0, (num(d['jitter']) ?? 0) / 100),
-    minimum: clamp01((num(d['Mnm']) ?? 0) / 100),
+    jitter: Math.max(0, (f.pct('jitter') ?? 0) / 100),
+    minimum: clamp01((f.pct('Mnm') ?? 0) / 100),
   };
 }
 
@@ -482,9 +598,8 @@ const BLEND_MAP: Record<string, TextureBlend> = {
   hardMix: 'hard-mix',
 };
 
-function mapBlend(v: DescValue | undefined): TextureBlend {
-  const e = enumVal(v);
-  return (e && BLEND_MAP[e]) || 'multiply';
+function mapBlend(v: string | undefined): TextureBlend {
+  return (v && BLEND_MAP[v]) || 'multiply';
 }
 
 /** toolOptions 'Md' paint-mode enum -> our layer BlendMode ids. */
@@ -525,26 +640,61 @@ interface TipInfo {
   flipY?: boolean;
 }
 
-function mapTip(tip: Descriptor | undefined): TipInfo {
-  if (!tip) return { tipId: null };
-  const spacingOn = bool(tip['Intr']);
-  const spacing = num(tip['Spcn']) ?? num(tip['Spcg']);
+/** The tip descriptor: the Brush Settings panel, so unit floats throughout. */
+function mapTip(f: Fields | undefined): TipInfo {
+  if (!f) return { tipId: null };
+  f.unknown([
+    'Dmtr', 'Hrdn', 'Angl', 'Rndn', 'Nm', 'Spcn', 'Spcg', 'Intr',
+    'flipX', 'flipY', 'sampledData',
+  ]);
+  const spacingOn = f.flag('Intr');
+  const spacing = f.pct('Spcn') ?? f.pct('Spcg');
   return {
-    tipId: str(tip['sampledData'])?.toLowerCase() ?? null,
-    size: num(tip['Dmtr']),
-    angle: num(tip['Angl']),
-    roundness: num(tip['Rndn']),
-    hardness: num(tip['Hrdn']),
+    tipId: f.text('sampledData')?.toLowerCase() ?? null,
+    size: f.px('Dmtr'),
+    angle: f.ang('Angl'),
+    roundness: f.pct('Rndn'),
+    hardness: f.pct('Hrdn'),
     spacing:
       spacingOn === false ? 0.01 : spacing !== undefined ? spacing / 100 : undefined,
-    flipX: bool(tip['flipX']),
-    flipY: bool(tip['flipY']),
+    flipX: f.flag('flipX'),
+    flipY: f.flag('flipY'),
   };
 }
 
+/** Keys of a brushPreset that are read below; the rest get reported. */
+const PRESET_KEYS = [
+  'Nm', 'Brsh', 'useTipDynamics', 'flipX', 'flipY', 'brushProjection',
+  'minimumDiameter', 'minimumRoundness', 'tiltScale', 'szVr', 'angleDynamics',
+  'roundnessDynamics', 'useScatter', 'bothAxes', 'Cnt', 'scatterDynamics',
+  'countDynamics', 'dualBrush', 'useDualBrush', 'brushGroup', 'useTexture',
+  'Txtr', 'interpretation', 'textureScale', 'textureBlendMode', 'textureDepth',
+  'minimumDepth', 'InvT', 'TxtC', 'textureBrightness', 'textureContrast',
+  'textureDepthDynamics', 'usePaintDynamics', 'opVr', 'prVr', 'flVr',
+  'useColorDynamics', 'colorDynamicsPerTip', 'perTip', 'clVr', 'H', 'Strt',
+  'Brgh', 'purity', 'Wtdg', 'Nose', 'Rpt', 'useBrushSize', 'useBrushPose',
+  'toolOptions',
+];
+
+const TOOL_KEYS = [
+  'brushPreset', 'flow', 'Smoo', 'Md', 'Opct', 'smoothing', 'smoothingValue',
+  'usePressureOverridesSize', 'usePressureOverridesOpacity', 'useLegacy',
+];
+
 /** Maps one brushPreset descriptor to a name/tip/pattern/settings record. */
-function mapBrushDescriptor(d: Descriptor): AbrBrush {
-  const tipDesc = desc(d['Brsh']);
+function mapBrushDescriptor(d: Descriptor, index: number, issues: AbrIssue[]): AbrBrush {
+  const f = new Fields(d, '', issues, index);
+  if (d.classId !== 'brushPreset') {
+    issues.push({
+      brush: index,
+      where: '(brush)',
+      kind: 'class',
+      message: `expected class brushPreset, got ${d.classId || '(none)'}`,
+    });
+  }
+  f.unknown(PRESET_KEYS);
+
+  const tipDesc = f.obj('Brsh', 'computedBrush', 'sampledBrush');
   const tip = mapTip(tipDesc);
   const settings: BrushPatch = {};
   const tipPatch: NonNullable<BrushPatch['tip']> = {};
@@ -559,70 +709,73 @@ function mapBrushDescriptor(d: Descriptor): AbrBrush {
   settings.tip = tipPatch;
 
   // Shape Dynamics
-  if (bool(d['useTipDynamics'])) {
-    const size = mapControl(desc(d['szVr']));
-    const angle = mapControl(desc(d['angleDynamics']));
-    const round = mapControl(desc(d['roundnessDynamics']));
+  if (f.flag('useTipDynamics')) {
+    const size = mapControl(f.obj('szVr', 'brVr'));
+    const angle = mapControl(f.obj('angleDynamics', 'brVr'));
+    const round = mapControl(f.obj('roundnessDynamics', 'brVr'));
     settings.shape = {
       enabled: true,
       sizeJitter: clamp01(size.jitter),
       sizeControl: size.control,
-      minDiameter: clamp01((num(d['minimumDiameter']) ?? 0) / 100) || size.minimum,
+      minDiameter: clamp01((f.pct('minimumDiameter') ?? 0) / 100) || size.minimum,
       angleJitter: clamp01(angle.jitter),
       angleControl: angle.control,
       roundnessJitter: clamp01(round.jitter),
       roundnessControl: round.control,
-      minRoundness: clamp01((num(d['minimumRoundness']) ?? 25) / 100),
+      minRoundness: clamp01((f.pct('minimumRoundness') ?? 25) / 100),
       // top-level flipX/flipY are the flip *jitters*; the tip's own flips
       // live inside the Brsh descriptor
-      flipXJitter: bool(d['flipX']) ?? false,
-      flipYJitter: bool(d['flipY']) ?? false,
+      flipXJitter: f.flag('flipX') ?? false,
+      flipYJitter: f.flag('flipY') ?? false,
     };
   }
 
   // Scattering — amount/control in scatterDynamics, count jitter in
   // countDynamics, count in 'Cnt ', axes in bothAxes
-  if (bool(d['useScatter'])) {
-    const sc = mapControl(desc(d['scatterDynamics']));
-    const cnt = mapControl(desc(d['countDynamics']));
+  if (f.flag('useScatter')) {
+    const sc = mapControl(f.obj('scatterDynamics', 'brVr'));
+    const cnt = mapControl(f.obj('countDynamics', 'brVr'));
     settings.scatter = {
       enabled: true,
-      bothAxes: bool(d['bothAxes']) ?? false,
+      bothAxes: f.flag('bothAxes') ?? false,
       // ABR stores scatter as a percentage that can reach 1000%; our model
       // uses 0..10 where 1.0 = a spread of 100% of the diameter (offsets
       // up to +-half a diameter)
       scatter: Math.min(sc.jitter, 10),
       scatterControl: sc.control,
-      count: Math.min(Math.max(num(d['Cnt']) ?? 1, 1), 16),
+      count: Math.min(Math.max(f.int('Cnt') ?? 1, 1), 16),
       countJitter: clamp01(cnt.jitter),
     };
   }
 
   // Texture
   let texturePatternId: string | null = null;
-  if (bool(d['useTexture'])) {
-    const txtr = desc(d['Txtr']);
-    texturePatternId = str(txtr?.['Idnt'])?.toLowerCase() ?? null;
-    const depthDyn = mapControl(desc(d['textureDepthDynamics']));
+  if (f.flag('useTexture')) {
+    const txtr = f.obj('Txtr', 'Ptrn');
+    txtr?.unknown(['Nm', 'Idnt']);
+    texturePatternId = txtr?.text('Idnt')?.toLowerCase() ?? null;
+    const depthDyn = mapControl(f.obj('textureDepthDynamics', 'brVr'));
     settings.texture = {
       enabled: true,
       // pattern id is resolved by the importer once patterns are registered
-      scale: Math.min(Math.max((num(d['textureScale']) ?? 100) / 100, 0.01), 10),
-      brightness: Math.min(1, Math.max(-1, (num(d['textureBrightness']) ?? 0) / 150)),
-      contrast: Math.min(1, Math.max(-1, (num(d['textureContrast']) ?? 0) / 100)),
-      invert: bool(d['InvT']) ?? false,
-      mode: mapBlend(d['textureBlendMode']),
-      depth: clamp01((num(d['textureDepth']) ?? 100) / 100),
-      textureEachTip: bool(d['TxtC']) ?? false,
+      scale: Math.min(Math.max((f.pct('textureScale') ?? 100) / 100, 0.01), 10),
+      // Brightness and Contrast are the Texture panel's integer sliders,
+      // not percentages: -150..150 and -50..100 in Photoshop's UI
+      brightness: Math.min(1, Math.max(-1, (f.int('textureBrightness') ?? 0) / 150)),
+      contrast: Math.min(1, Math.max(-1, (f.int('textureContrast') ?? 0) / 100)),
+      invert: f.flag('InvT') ?? false,
+      mode: mapBlend(f.enm('textureBlendMode')),
+      depth: clamp01((f.pct('textureDepth') ?? 100) / 100),
+      textureEachTip: f.flag('TxtC') ?? false,
       depthJitter: clamp01(depthDyn.jitter),
       depthControl: depthDyn.control,
     };
   }
 
   // Transfer (paint dynamics): opVr = opacity, prVr = flow
-  if (bool(d['usePaintDynamics'])) {
-    const op = mapControl(desc(d['opVr']));
-    const fl = mapControl(desc(d['prVr']) ?? desc(d['flVr']));
+  if (f.flag('usePaintDynamics')) {
+    const op = mapControl(f.obj('opVr', 'brVr'));
+    const fl = mapControl(f.obj('prVr', 'brVr') ?? f.obj('flVr', 'brVr'));
     settings.transfer = {
       enabled: true,
       opacityJitter: clamp01(op.jitter),
@@ -635,32 +788,36 @@ function mapBrushDescriptor(d: Descriptor): AbrBrush {
   }
 
   // Color Dynamics
-  if (bool(d['useColorDynamics'])) {
-    const fgbg = mapControl(desc(d['clVr']));
+  if (f.flag('useColorDynamics')) {
+    const fgbg = mapControl(f.obj('clVr', 'brVr'));
     settings.color = {
       enabled: true,
-      applyPerTip: bool(d['colorDynamicsPerTip']) ?? bool(d['perTip']) ?? true,
+      applyPerTip: f.flag('colorDynamicsPerTip') ?? f.flag('perTip') ?? true,
       fgBgJitter: clamp01(fgbg.jitter),
       fgBgControl: fgbg.control,
-      hueJitter: clamp01((num(d['H']) ?? 0) / 100),
-      satJitter: clamp01((num(d['Strt']) ?? 0) / 100),
-      briJitter: clamp01((num(d['Brgh']) ?? 0) / 100),
-      purity: Math.min(1, Math.max(-1, (num(d['purity']) ?? 0) / 100)),
+      hueJitter: clamp01((f.pct('H') ?? 0) / 100),
+      satJitter: clamp01((f.pct('Strt') ?? 0) / 100),
+      briJitter: clamp01((f.pct('Brgh') ?? 0) / 100),
+      purity: Math.min(1, Math.max(-1, (f.pct('purity') ?? 0) / 100)),
     };
   }
 
   // Dual Brush — useDualBrush is nested inside the dualBrush descriptor
-  const dualDesc = desc(d['dualBrush']);
-  if (dualDesc && (bool(dualDesc['useDualBrush']) ?? bool(d['useDualBrush']))) {
-    const dualTip = mapTip(desc(dualDesc['Brsh']));
-    const dualScatter = mapControl(desc(dualDesc['scatterDynamics']));
-    const dualCount = mapControl(desc(dualDesc['countDynamics']));
-    const panelSpacing = num(dualDesc['Spcn']);
+  const dualDesc = f.obj('dualBrush', 'dualBrush');
+  if (dualDesc && (dualDesc.flag('useDualBrush') ?? f.flag('useDualBrush'))) {
+    dualDesc.unknown([
+      'useDualBrush', 'Flip', 'Brsh', 'BlnM', 'useScatter', 'Spcn', 'Cnt',
+      'bothAxes', 'countDynamics', 'scatterDynamics',
+    ]);
+    const dualTip = mapTip(dualDesc.obj('Brsh', 'computedBrush', 'sampledBrush'));
+    const dualScatter = mapControl(dualDesc.obj('scatterDynamics', 'brVr'));
+    const dualCount = mapControl(dualDesc.obj('countDynamics', 'brVr'));
+    const panelSpacing = dualDesc.pct('Spcn');
     settings.dual = {
       enabled: true,
       shape: dualTip.tipId ?? 'round',
       hardness: dualTip.hardness !== undefined ? clamp01(dualTip.hardness / 100) : 1,
-      mode: mapBlend(dualDesc['BlnM']),
+      mode: mapBlend(dualDesc.enm('BlnM')),
       size: Math.min(Math.max(dualTip.size ?? 40, 1), 1000),
       // The Dual Brush panel's Spacing slider is stored on the nested tip
       // (dualBrush.Brsh.Spcn) — verified against real Photoshop files. The
@@ -671,35 +828,46 @@ function mapBrushDescriptor(d: Descriptor): AbrBrush {
         0.01,
       ),
       scatter: Math.min(dualScatter.jitter, 10),
-      bothAxes: bool(dualDesc['bothAxes']) ?? false,
-      count: Math.min(Math.max(num(dualDesc['Cnt']) ?? 1, 1), 16),
+      bothAxes: dualDesc.flag('bothAxes') ?? false,
+      count: Math.min(Math.max(dualDesc.int('Cnt') ?? 1, 1), 16),
       countJitter: clamp01(dualCount.jitter),
     };
   }
 
-  // Options-bar state
-  const tool = desc(d['toolOptions']);
+  // Options-bar state. This descriptor mirrors the options bar, where
+  // Opacity, Flow and Smoothing are whole integers — Photoshop's own
+  // scripting API reads them back with getInteger — so a unit float here is
+  // the wrong type, not a more precise one.
+  const tool = f.obj('toolOptions', 'PbTl');
   if (tool) {
-    const opct = num(tool['Opct']);
+    tool.unknown(TOOL_KEYS);
+    const opct = tool.int('Opct');
     if (opct !== undefined) settings.opacity = clamp01(opct / 100);
-    const flow = num(tool['flow']);
+    const flow = tool.int('flow');
     if (flow !== undefined) settings.flow = clamp01(flow / 100);
-    const smoo = num(tool['smoothingValue']) ?? num(tool['Smoo']);
+    // Smoothing is stored twice: 'Smoo' is the amount itself (the "smooth"
+    // integer, 0..100), and 'smoothingValue' mirrors it as a double over 255.
+    const smoo = tool.int('Smoo');
+    const smoothingValue = tool.dbl('smoothingValue');
     if (smoo !== undefined) settings.smoothing = clamp01(smoo / 100);
-    const mode = enumVal(tool['Md']);
+    else if (smoothingValue !== undefined) settings.smoothing = clamp01(smoothingValue / 255);
+    const mode = tool.enm('Md');
     if (mode && PAINT_MODE_MAP[mode]) settings.blendMode = PAINT_MODE_MAP[mode];
-    const pSize = bool(tool['usePressureOverridesSize']);
+    const pSize = tool.flag('usePressureOverridesSize');
     if (pSize !== undefined) settings.pressureSize = pSize;
-    const pOp = bool(tool['usePressureOverridesOpacity']);
+    const pOp = tool.flag('usePressureOverridesOpacity');
     if (pOp !== undefined) settings.pressureOpacity = pOp;
   }
 
-  if (bool(d['Wtdg']) !== undefined) settings.wetEdges = bool(d['Wtdg']);
-  if (bool(d['Nose']) !== undefined) settings.noise = bool(d['Nose']);
-  if (bool(d['Rpt']) !== undefined) settings.airbrush = bool(d['Rpt']);
+  const wetEdges = f.flag('Wtdg');
+  if (wetEdges !== undefined) settings.wetEdges = wetEdges;
+  const noise = f.flag('Nose');
+  if (noise !== undefined) settings.noise = noise;
+  const airbrush = f.flag('Rpt');
+  if (airbrush !== undefined) settings.airbrush = airbrush;
 
   return {
-    name: str(d['Nm']) ?? '',
+    name: f.text('Nm') ?? '',
     tipId: tip.tipId,
     texturePatternId,
     settings,
@@ -796,6 +964,7 @@ function parseV6(r: Reader, version: number, subVersion: number): AbrResult {
   const tips = new Map<string, GrayMap>();
   const patterns = new Map<string, AbrPattern>();
   const sampleOrder: string[] = [];
+  const issues: AbrIssue[] = [];
   let described: AbrBrush[] = [];
 
   while (r.remaining >= 12) {
@@ -839,12 +1008,19 @@ function parseV6(r: Reader, version: number, subVersion: number): AbrResult {
       try {
         if (r.peekU32() === 16) r.u32(); // versioned descriptor prefix
         const descriptor = parseDescriptor(r);
-        const list = descriptor['Brsh'];
-        if (Array.isArray(list)) {
-          described = list.filter(isDesc).map(mapBrushDescriptor);
+        const list = descriptor.fields['Brsh'];
+        if (list?.t === 'list') {
+          described = list.v
+            .flatMap((item) => (item.t === 'desc' ? [item.v] : []))
+            .map((item, i) => mapBrushDescriptor(item, i, issues));
         }
       } catch (err) {
-        console.warn('[northlight] ABR descriptor parse failed:', err);
+        issues.push({
+          brush: -1,
+          where: 'desc',
+          kind: 'type',
+          message: `descriptor parse failed: ${err instanceof Error ? err.message : String(err)}`,
+        });
       }
     } else if (key === 'patt') {
       while (r.pos + 4 < end) {
@@ -894,7 +1070,7 @@ function parseV6(r: Reader, version: number, subVersion: number): AbrResult {
       settings: {},
     }));
   }
-  return { version, tips, patterns, brushes };
+  return { version, tips, patterns, brushes, issues };
 }
 
 function parseV12(r: Reader, version: number): AbrResult {
@@ -937,7 +1113,8 @@ function parseV12(r: Reader, version: number): AbrResult {
     }
     r.pos = end;
   }
-  return { version, tips, patterns: new Map(), brushes };
+  // v1/v2 files are a flat list of tips: no descriptors, nothing to check
+  return { version, tips, patterns: new Map(), brushes, issues: [] };
 }
 
 export function parseAbr(buf: ArrayBuffer): AbrResult {

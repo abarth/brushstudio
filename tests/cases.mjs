@@ -256,32 +256,102 @@ export async function runCases(BS, backend = 'cpu') {
     assert(result.bytes > 0, 'the writer produced no bytes');
   });
 
-  await test('the options-bar percentages are written as unit floats', async () => {
-    // Photoshop reads Opacity and Flow as percentages and ignores either key
-    // when it arrives as an integer, so the brush imports painting with
-    // whatever the tool is currently set to. abr.ts's num() unwraps a unit
-    // float and a long alike, which is why the round trip above cannot see
-    // the difference and the bytes have to be read directly. The fractional
-    // percentages are the other half of the same fault: a long would round
-    // 22.5% to 23%.
-    const written = await BS.exportAbr([doc({ flow: 0.225, opacity: 0.375 })], {});
+  await test('every value is written at the type Photoshop stores it at', async () => {
+    // Two panels, two conventions, and the file has to match both: the Brush
+    // Settings panel keeps percentages as '#Prc' unit floats, while
+    // toolOptions mirrors the options bar, where Opacity, Flow and Smoothing
+    // are whole integers — Photoshop's own scripting API reads those back
+    // with getInteger. The reader refuses a value at the wrong type now, so
+    // the round trip below catches most of this; the bytes are what pin the
+    // unit, which nothing else can see. docs/abr.md carries the whole table.
+    const written = await BS.exportAbr([doc({
+      tip: { size: 33, hardness: 0.5, spacing: 0.2, roundness: 0.75, angle: 30 },
+      flow: 0.4,
+      opacity: 0.8,
+      smoothing: 0.2,
+    })], {});
     const bytes = typeof written.abr === 'string'
       ? Uint8Array.from(atob(written.abr), (c) => c.charCodeAt(0))
       : new Uint8Array(written.abr);
-    // a four-character descriptor key is written as u32 0 + the key, and the
-    // four bytes after it are the value's type
+    // a descriptor key is u32 length + ascii, where a four-character key
+    // writes its length as 0; the type follows, and a unit float its unit
     const typeOf = (key) => {
-      const needle = [0, 0, 0, 0, ...[...key].map((c) => c.charCodeAt(0))];
-      for (let i = 0; i + needle.length + 4 <= bytes.length; i++) {
+      const len = key.length === 4 ? 0 : key.length;
+      const needle = [len >> 24 & 255, len >> 16 & 255, len >> 8 & 255, len & 255,
+        ...[...key].map((c) => c.charCodeAt(0))];
+      for (let i = 0; i + needle.length + 8 <= bytes.length; i++) {
         if (needle.every((b, k) => bytes[i + k] === b)) {
-          return String.fromCharCode(...bytes.subarray(i + needle.length, i + needle.length + 4));
+          const at = i + needle.length;
+          const type = String.fromCharCode(...bytes.subarray(at, at + 4));
+          return type === 'UntF'
+            ? type + String.fromCharCode(...bytes.subarray(at + 4, at + 8))
+            : type;
         }
       }
       return 'missing';
     };
-    assert(typeOf('flow') === 'UntF', `flow was written as ${typeOf('flow')}`);
-    assert(typeOf('Opct') === 'UntF', `Opct was written as ${typeOf('Opct')}`);
+    const expected = {
+      Dmtr: 'UntF#Pxl',
+      Hrdn: 'UntF#Prc',
+      Angl: 'UntF#Ang',
+      Rndn: 'UntF#Prc',
+      Spcn: 'UntF#Prc',
+      minimumDiameter: 'UntF#Prc',
+      flow: 'long',
+      Opct: 'long',
+      Smoo: 'long',
+      smoothingValue: 'doub',
+      textureBrightness: 'missing', // no texture on this brush
+    };
+    for (const [key, want] of Object.entries(expected)) {
+      assert(typeOf(key) === want, `${key} was written as ${typeOf(key)}, wanted ${want}`);
+    }
     assert(written.issues.length === 0, written.issues.join('; '));
+  });
+
+  await test('a value at the wrong type is refused, not unwrapped', async () => {
+    // Everything the round-trip check is worth rests on the reader being
+    // able to tell a value Photoshop would refuse from one it would read.
+    // Here the options-bar Flow is rewritten as a '#Prc' unit float — the
+    // type the Brush Settings panel uses, and the wrong one for this
+    // descriptor — and has to come back reported and unread, not quietly
+    // correct, which is what the old reader did with it.
+    const written = await BS.exportAbr([doc({ flow: 0.4 })], {});
+    const bytes = typeof written.abr === 'string'
+      ? Uint8Array.from(atob(written.abr), (c) => c.charCodeAt(0))
+      : new Uint8Array(written.abr);
+    const find = (needle) => {
+      const n = [...needle].map((c) => c.charCodeAt(0));
+      for (let i = 0; i + n.length <= bytes.length; i++) {
+        if (n.every((b, k) => bytes[i + k] === b)) return i;
+      }
+      return -1;
+    };
+    const at = find('\u0000\u0000\u0000\u0000flow') + 8; // just past the key
+    assert(bytes[at] === 0x6c, 'flow was not a long to begin with');
+
+    // 'long' + i32 is 8 bytes; 'UntF' + '#Prc' + f64 is 16
+    const swap = new Uint8Array(16);
+    swap.set([...'UntF#Prc'].map((c) => c.charCodeAt(0)));
+    new DataView(swap.buffer).setFloat64(8, 40);
+    const patched = new Uint8Array(bytes.length + 8);
+    patched.set(bytes.subarray(0, at));
+    patched.set(swap, at);
+    patched.set(bytes.subarray(at + 8), at + 16);
+    // the 'desc' section header carries its own length, and it sits before
+    // the bytes we grew
+    const descLen = find('8BIMdesc') + 8;
+    const view = new DataView(patched.buffer);
+    view.setUint32(descLen, view.getUint32(descLen) + 8);
+
+    const report = BS.inspectAbr(patched, 'patched.abr');
+    const issue = report.issues.find((i) => i.where === 'toolOptions.flow');
+    assert(issue, `no issue was reported: ${JSON.stringify(report.issues)}`);
+    assert(issue.kind === 'type', `issue was ${JSON.stringify(issue)}`);
+    assert(
+      report.brushes[0].patch.flow === undefined,
+      `the refused value was read anyway: ${report.brushes[0].patch.flow}`,
+    );
   });
 
   await test('a sampled tip and a texture pattern are embedded', async () => {

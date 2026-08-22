@@ -184,6 +184,11 @@ export function inspectAbr(abr: string | Uint8Array | ArrayBuffer, path: string)
     }),
     tips: tipStats,
     patterns: [...parsed.patterns].map(([id, p]) => ({ id, name: p.name, size: p.map.size })),
+    // What the file holds that Photoshop's format does not describe: a key
+    // at the wrong type, a descriptor at the wrong class, or a key we do not
+    // read at all. On someone else's pack this is the interesting part —
+    // it is the pack telling us where our schema is wrong or incomplete.
+    issues: parsed.issues,
   };
 }
 
@@ -193,7 +198,12 @@ export async function exportAbr(docs: BrushDoc[], assets: AssetBag, ctx: Command
   const brushes = resolved.map((r) => ({ name: r.name, settings: r.settings }));
   const buffer = writeAbr(brushes);
   const back = parseAbr(buffer);
-  const issues: string[] = [];
+  // Reading our own bytes with a strict reader is what makes this check
+  // worth anything: a value at a type Photoshop would refuse now comes back
+  // as an issue instead of arriving unwrapped and looking correct.
+  const issues: string[] = back.issues
+    .filter((i) => i.kind !== 'unknown')
+    .map((i) => `${i.brush >= 0 ? `[${i.brush}] ` : ''}${i.where}: ${i.message}`);
   const near = (a: number, b: number, tol: number, what: string, i: number) => {
     if (Math.abs(a - b) > tol) issues.push(`[${i}] ${what}: wrote ${a}, read ${b}`);
   };
@@ -217,8 +227,12 @@ export async function exportAbr(docs: BrushDoc[], assets: AssetBag, ctx: Command
     eq(s.dual.enabled, g.dual.enabled, 'dual.enabled', i);
     eq(s.texture.enabled, g.texture.enabled, 'texture.enabled', i);
     eq(s.transfer.enabled, g.transfer.enabled, 'transfer.enabled', i);
-    near(s.flow, g.flow, 1e-5, 'flow', i);
-    near(s.opacity, g.opacity, 1e-5, 'opacity', i);
+    // the options bar holds whole percentages, so half a percent is the
+    // tightest these three can round-trip: anything worse is a lost value,
+    // not a rounded one
+    near(s.flow, g.flow, 0.005, 'flow', i);
+    near(s.opacity, g.opacity, 0.005, 'opacity', i);
+    near(s.smoothing, g.smoothing, 0.005, 'smoothing', i);
     eq(s.blendMode, g.blendMode, 'blendMode', i);
     if (s.tip.shape !== 'round' && (!got.tipId || !back.tips.has(got.tipId))) {
       issues.push(`[${i}] sampled tip did not survive the round trip`);
