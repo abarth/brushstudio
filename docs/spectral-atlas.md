@@ -26,23 +26,32 @@ families, at `tips/<name>.spec.json` with 30/55/80 depth levels in
 
 | family | spectrum | train | texture % | reads as |
 | --- | --- | --- | --- | --- |
-| **flow** | ring k=10 + wedge 18° + warp | rigid | 15.9 | water surface, current, drift |
-| **whorl** | ring k=16 + wedge 12° + warp | rigid | 14.5 | fingerprint eddies, burl, turbulence |
-| **sand** | ring k=10 + wedge 18° | deep | 10.9 | rippled sand, with free dislocations |
-| **drape** | β=3.0 + wedge 22° + warp | rigid 0.18 | 10.4 | hanging cloth |
-| **corduroy** | ring k=16 + wedge 12° | deep | 9.9 | combed clay, drawn fibre |
-| **woodgrain** | β=2.6 + wedge 14° + warp | rigid 0.14 | 9.7 | grain round a knot, smoke curl |
-| **reticule** | ring k=16 | deep | 9.6 | pumice, coral rag, even pitting |
-| **tooth** | near-white 12–70 c/dia | deep | 8.8 | paper tooth, spray, film grain |
-| **labyrinth** | ring k=8 | deep | 8.0 | brain coral, dense foam |
-| **herringbone** | two wedges at ±40° | deep | 7.9 | crosshatch, woven mesh |
-| **strata** | coarse ×9 + thin grain | deep | 6.6 | bedded sediment, weathered plank |
-| **vesicle** | ring k=16 + lognormal σ=0.8 | deep | 4.4 | vesicular basalt, beaded glaze |
+| **flow** | ring k=10 + wedge 18° + warp | rigid | 17.1 | water surface, current, drift |
+| **whorl** | ring k=16 + wedge 12° + warp | rigid | 14.1 | fingerprint eddies, burl, turbulence |
+| **drape** | β=3.0 + wedge 22° + warp | rigid 0.18 | 10.2 | hanging cloth |
+| **reticule** | ring k=16 | deep | 10.0 | pumice, coral rag, even pitting |
+| **labyrinth** | ring k=8 | deep | 9.9 | brain coral, dense foam |
+| **sand** | ring k=10 + wedge 18° | deep | 9.5 | rippled sand, with free dislocations |
+| **woodgrain** | β=2.6 + wedge 14° along + warp | rigid 0.14 | 9.5 | grain round a knot, smoke curl |
+| **corduroy** | ring k=16 + wedge 12° along | deep | 8.6 | combed clay, drawn fibre |
+| **herringbone** | two wedges at ±40° | deep | 7.4 | crosshatch, woven mesh |
+| **tooth** | near-white 12–70 c/dia | deep | 7.2 | paper tooth, spray, film grain |
+| **vesicle** | ring k=16 + lognormal σ=0.5 | deep | 5.9 | vesicular basalt, beaded glaze |
+| **strata** | coarse ×9 + thin grain | deep | 5.6 | bedded sediment, weathered plank |
 
 Every one clears the acceptance bars at depth 0.55 (ripple 1.1–2.8%, comb p-p
-0.8–3.7%). Two needed their rigid train tightened past the family default
+0.9–5.1%). Two needed their rigid train tightened past the family default
 to get there — woodgrain to spacing 0.14, drape to 0.18 — because a
 scale-free wedge carries coarse power right where the count staircase sits.
+
+Three changed after the first pass at review. Vesicle's σ came down from
+0.8, which had left it near-solid paint with a whisper of beading; corduroy
+and woodgrain turned their crest axis 90° so the fibre runs *along* the
+mark. Turning those two also caught a directional blind spot in the audit —
+`texture %` used to be measured along the stroke, which read a wedge rotated
+90° as having lost half its contrast — so every number in this table is from
+the tiled 2-D measure that replaced it and none is comparable to a figure
+quoted earlier in this page.
 
 The selection weighted three things: measured delivered contrast, distinct
 material territory (no two of the twelve are the same idea at different
@@ -77,8 +86,8 @@ applies across all of them.
 
 Two decisions carried into the promotion. The warped families ship on the
 **shallow rigid train**, not the deep one (§4). And the crest axis is a
-design choice per brush, not a default (§2) — all twelve currently run
-their wavevector along x, so the grain crosses a horizontal stroke.
+design choice per brush, not a default (§2): sand and flow put their crests
+*across* a horizontal stroke, corduroy and woodgrain run them *along* it.
 
 ## 1. What makes a spectrum *fractal*
 
