@@ -37,6 +37,7 @@ npm run dev                                            # paint with it by hand
 
 node tools/fractal-tip.mjs tips/x.spec.json --calibrate  # synthesize + calibrate texture tips
 node tools/spectrum-audit.mjs brushes/x.json             # comb/spike/isotropy/β on painted marks
+node tools/accumulation-survey.mjs                       # what the dual gate can and cannot do to tone
 
 npm test                 # the harness suite, CPU renderer (~4s)
 npm run test:gpu         # the same suite through WebGPU (~30s)

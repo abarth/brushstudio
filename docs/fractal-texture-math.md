@@ -373,14 +373,17 @@ kernel each one undoes:
   must carry `v = 1 − (depth·damage)^(1/n̄)` — without this inverse, mid
   tones compress toward white and the painted texture is flatter than the
   design.
-* **Second moment (spectrum):** *exempt.* The `1/H` division of §3 undoes
-  scatter smearing in a train that relies on scatter to decorrelate — a
-  print's union. A tonal train is kept **near-rigid** (below), so the
-  stroke window reproduces the tip spectrum directly, the value curve is
-  the whole deconvolution, and `fractal-tip` sets `H ≡ 1` for
-  `maskMode: "tonal"`. Dividing by `H` anyway would pump `1/H → 27×`
-  power into the modes a rigid train no longer smears (`k ≲ 1.5 c/dia` at
-  scatter 0.2) — which is precisely the splotch band.
+* **Second moment (spectrum):** off by default for a tonal mask
+  (`scatterDeconv`). The `1/H` division of §3 undoes scatter smearing in a
+  train that relies on scatter to decorrelate. A tonal train is kept
+  **near-rigid** (below), which does not smear, so the stroke window
+  reproduces the tip spectrum directly and the value curve is the whole
+  deconvolution; dividing by `H` there would pump `1/H → 27×` power into
+  the modes the train no longer smears (`k ≲ 1.5 c/dia` at scatter 0.2) —
+  precisely the splotch band. Turn it back on for a tonal mask
+  deliberately scattered wide, where the mean field really is the tip
+  convolved with the scatter marginal, and pair it with `highpassK`, which
+  zeroes the band where `1/H` would run away.
 
 **The near-rigid train.** The value inverse assumes every point sees
 exactly `n̄` stamps. Anything that randomizes the *count* `n(x)` makes the
@@ -417,6 +420,81 @@ sources, three rules:
    taper in the vignette, hop = half the envelope width) — that cancels
    the staircase identically instead of dividing it.
 
+**Why no accumulation function saves this.** The obvious escape is to look
+for a compositing operator whose result does not depend on how many stamps
+land — one where a dab's contribution preserves the train's average. There
+isn't one, and the reason is worth stating once so nobody re-derives it:
+
+* The mask buffer accumulates with **over** — `m ← v + m(1−v)` — and that
+  is not a choosable function. Photoshop's Dual Brush *Mode* list
+  (Multiply, Darken, Subtract, …) does not govern the accumulation; it
+  governs the single application of the finished mask to the stroke, at
+  merge.
+* At that single application the mode barely matters either. With a solid
+  stroke interior (`cov = 1`, which is what a gated family paints),
+  Multiply, Subtract, Darken and Linear Burn all reduce to exactly
+  `tone = v`; Height is `1 − 1.5(1 − v)`, the same law with a gain; and
+  Overlay, Lighten, Screen, Color Dodge, Color Burn and Hard Mix are
+  *constant* — they cannot darken a saturated stroke at all. So the gate is
+  an identity remap and the count law lives entirely in the buffer.
+  (`tools/accumulation-survey.mjs` prints this from the engine's own blend
+  code.)
+* Therefore the painted tone is `f(1 − (1−v)^n)` for a fixed monotone `f`,
+  which is strictly increasing in `n` for every `v ∈ (0,1)` and constant in
+  `n` only for `v ∈ {0,1}`. **Count-invariance and tonal grading are
+  mutually exclusive in a mask that accumulates.** A binary mask is
+  invariant in value — but then the tone must come from area, and area
+  unions up by the same law.
+
+What *is* exactly count-invariant is a channel applied **once per pixel**:
+the Texture panel with Texture Each Tip off, which multiplies the merged
+coverage by a canvas-anchored pattern exactly once however many dabs
+landed. That is the only exact answer the engine offers, and it costs
+canvas anchoring — the texture stops travelling with the stroke.
+
+**The scatter budget.** Within the dual gate, then, scatter is bought with
+overlap. Both artifacts fall as the count averages (`1/√n̄`) and the
+delivered texture contrast falls at the same rate, because each additional
+stamp averages in one more *independent* window of the field. Measured on
+Hammered 55 (`ripple %`, `comb p-p %`, `texture %` from §7):
+
+| train | ripple | comb | texture |
+| --- | --- | --- | --- |
+| scatter 0.7, `n̄` 3 | 3.9% | — | 9.0% |
+| scatter 0.2, `n̄` 3 (shipped) | 2.1% | 6.6% | 7.3% |
+| scatter 0.45, `n̄` 6 | 1.7% | 2.2% | 5.7% |
+| scatter 0.7, `n̄` 12 | 2.1% | 0.9% | 3.9% |
+
+So full scatter *is* available — at `n̄` 12 it is as clean as the rigid
+train and has almost no comb — and the price is 4× the dual stamps and
+half the texture contrast.
+
+**Contrast is recoverable; phase is not.** The `√n̄` contrast loss can be
+bought back with gain, but the structure cannot. Stamps arrive at random
+offsets *and* under random mirror flips, so the accumulation is not a
+convolution: it averages statistically independent windows of the field.
+`1/H` restores the spectrum of that average, and gain restores its
+variance, but the facet edges, dent rims and scratch lines — the field's
+*phase* — are gone, and what comes back is high-contrast mush. This is §4's
+phase argument again, now in the tonal domain, and it sets the rule:
+
+> **A texture whose identity is in its phase** — dents, facets, cracks,
+> scratches, oriented domains — **wants a shallow rigid train** (`n̄` ≈ 3,
+> scatter ≤ 0.2), and gets its variety from the tip, the mirror flips and
+> the vignette's tearing. **A texture whose identity is in its spectrum** —
+> a Gaussian field: cloud, agate, billow — can spend overlap freely and
+> take the scatter, because the average of independent windows of a
+> Gaussian field is the same field.
+
+One caveat on spending that budget: it is only available to a *tonal* mask.
+A coverage cut accumulates binary sets, and a union of sets does not
+average — it fills — so deeper overlap destroys a print rather than
+smoothing it (§4). The coverage-cut members of the shipped collection are
+the collection's worst splotchers for exactly this reason (Agate 55:
+`ripple` 8.9%, `comb p-p` 18%; Cloud 55: 10.6% and 23.7%, against 1.2–2.8%
+and 1.3–9.2% for the tonal five); the route open to them is conversion to a
+tonal mask first, then the overlap.
+
 One approximation remains, checked by the stroke-window comparison rather
 than assumed: overlapping stamps sample the same bitmap under mirror
 flips, so the accumulation is correlated rather than i.i.d.; at the
@@ -445,6 +523,7 @@ crops and a log-power image of the spectrum for the eye.
 | spectrum | audit `beta` — radial log-log slope over 2–30 c/dia | smooth curve, no bumps; β rises with coverage (sparse prints are legitimately whiter) |
 | coverage | calibration `core` (§4) | target ± 0.02 |
 | splotch | audit `ripple %` — std/mean of the stroke's core-band tone profile smoothed at the mask-stamp diameter (§6's count-variance discs; §3's beading, measured on the mark) | tonal ≲ 3%; prints judged against the §3 `√(H/n̄)` budget |
+| texture delivered | audit `texture %` — RMS of the stroke's core rows over 5–30 c/dia, as percent of tone; falls as `1/√n̄` with mask overlap (§6) | compare against the family's shallow-train value, not an absolute bar |
 | train residue | audit `comb p-p %` — strongest periodic line in the stroke profile over 2–24 c/dia, in excess of its spectral neighbourhood, as p-p percent of tone | ≲ 5%, at any frequency; §6's staircase law says what a lower number costs |
 | breaks | `measure` → `worstGap` | < 0.5 dia (levels ≥ 30%; below that the gaps *are* the design) |
 | ghosts | autocorrelation of the stroke alpha | no secondary peak beyond the texture's own correlation length |

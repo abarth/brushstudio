@@ -114,6 +114,11 @@ const coverageOf = (alpha) => {
  *   train survives the across-band average coherently and stands above
  *   its neighbourhood; broadband texture is its own neighbourhood and
  *   cancels out of the excess.
+ * - `texturePct`: RMS of the core rows' tone over the texture band
+ *   (5-30 c/dia), as percent of tone — the contrast the mark actually
+ *   delivers. It is the third leg of the train trade (docs §6): overlap
+ *   buys down ripple and comb at `1/sqrt(n)`, and spends this at the same
+ *   rate.
  */
 function strokeStats(alpha, w, hh, d, stampD) {
   const rowMean = new Float64Array(hh);
@@ -191,11 +196,36 @@ function strokeStats(alpha, w, hh, d, stampD) {
     }
   }
   const amp = (2 * best) / n / 0.5; // undo 1/N and the Hann coherent gain
+
+  // delivered texture contrast: per-row band power over the core, averaged
+  let bandPow = 0;
+  for (let y = y0; y <= y1; y++) {
+    const rr = new Float64Array(n);
+    const ri = new Float64Array(n);
+    let rowMeanTone = 0;
+    for (let i = 0; i < n; i++) rowMeanTone += alpha[y * w + x0 + off + i];
+    rowMeanTone /= n;
+    for (let i = 0; i < n; i++) {
+      const win = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (n - 1));
+      rr[i] = (alpha[y * w + x0 + off + i] - rowMeanTone) * win;
+    }
+    fft(rr, ri);
+    let p = 0;
+    for (let k = 1; k < n / 2; k++) {
+      const c = (k / n) * d;
+      // Hann power gain 0.375; the factor 2 folds the negative frequencies
+      if (c >= 5 && c <= 30) p += (2 * (rr[k] * rr[k] + ri[k] * ri[k])) / (n * n) / 0.375;
+    }
+    bandPow += p;
+  }
+  bandPow /= y1 - y0 + 1;
+
   return {
     tone: tone / 255,
     ripplePct,
     combPpPct: (100 * 2 * amp) / tone,
     combAtCPerDia: +bestK.toFixed(1),
+    texturePct: (100 * Math.sqrt(bandPow)) / tone,
   };
 }
 
@@ -428,6 +458,7 @@ for (const brush of resolved) {
           ripplePct: +s.ripplePct.toFixed(2),
           combPpPct: +s.combPpPct.toFixed(2),
           combAtCPerDia: s.combAtCPerDia,
+          texturePct: +s.texturePct.toFixed(2),
         },
         radial: a.radial.map(({ k, power }) => ({ k: +k.toFixed(3), power })),
       },
@@ -449,11 +480,13 @@ for (const brush of resolved) {
     tone: s.tone.toFixed(3),
     'ripple %': s.ripplePct.toFixed(1),
     'comb pp %': `${s.combPpPct.toFixed(1)} @${s.combAtCPerDia}`,
+    'texture %': s.texturePct.toFixed(1),
   });
   console.log(
     `${name}: β=${a.beta.toFixed(2)}, spike ${a.worstSpike.ratio.toFixed(1)}× @${a.worstSpike.k}c/dia, ` +
       `comb ${a.combAlong.ratio.toFixed(1)}× @${a.combAlong.k}c/dia, aniso ${a.anisotropyDb.toFixed(1)}dB | ` +
-      `stroke tone ${s.tone.toFixed(3)}, ripple ${s.ripplePct.toFixed(1)}%, comb p-p ${s.combPpPct.toFixed(1)}% @${s.combAtCPerDia}c/dia`,
+      `stroke tone ${s.tone.toFixed(3)}, ripple ${s.ripplePct.toFixed(1)}%, comb p-p ${s.combPpPct.toFixed(1)}% @${s.combAtCPerDia}c/dia, ` +
+      `texture ${s.texturePct.toFixed(1)}%`,
   );
 }
 console.table(rows);

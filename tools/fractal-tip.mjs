@@ -114,17 +114,18 @@ const lambda = makeLambda();
  * to native. The tip rides the DUAL train in a gated family — the mask is
  * what carries the texture — so its kernel is the dual scatter. A pattern
  * spec (`output: "pattern"`) is canvas-anchored: no train, no kernel,
- * H ≡ 1. A TONAL mask is also exempt: its train is kept near-rigid (small
- * absolute scatter, deterministic overlap count), so the stroke window
- * reproduces the tip spectrum directly and the value curve is the whole
- * deconvolution — dividing by H here would just pump power into the
- * coarse modes the train no longer smears (1/H → 27× at k ≲ 1.5 for
- * scatter 0.2), which is the stroke-width splotch band.
+ * H ≡ 1.
+ *
+ * `scatterDeconv` decides whether to divide by H at all. It defaults on for
+ * a coverage cut and OFF for a tonal mask, because the two shipped trains
+ * differ: a tonal mask rides a near-rigid train (docs §6), which does not
+ * smear, so 1/H would only pump power into the coarse modes — the splotch
+ * band. Turn it back on for a tonal mask deliberately scattered wide, where
+ * the mean field really is the tip convolved with the scatter marginal; pair
+ * it with `highpassK`, which zeroes the band where 1/H would run away.
  */
-const S_TIP =
-  spec.maskMode === 'tonal' ? 0
-  : spec.train?.dual ? spec.train.dual.scatter * (N / 2)
-  : 0;
+const SCATTER_DECONV = spec.scatterDeconv ?? spec.maskMode !== 'tonal';
+const S_TIP = SCATTER_DECONV && spec.train?.dual ? spec.train.dual.scatter * (N / 2) : 0;
 /** Scatter transfer H(f) = 1 − Λ(2πfS)² — the kernel we deconvolve by. */
 function scatterTransfer(fPerPx) {
   if (!S_TIP) return 1;
