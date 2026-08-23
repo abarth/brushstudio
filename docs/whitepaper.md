@@ -223,7 +223,48 @@ intermittency: the median damage lands at `e^(−2.58σ)`, so the field reads
 as mostly-intact material with rare deep bites, a look the rank mapping
 cannot reach at all.
 
-### 5.4 Consequences for the train
+### 5.4 The other place to put a texture
+
+The dual gate was chosen because union destroys prints. But the primary
+train is the *cleaner* linear system — it is the one §2 describes exactly,
+`D = τ ⊛ P`, with no value curve, no count-invariance problem and no
+geometric mean — and it can do something the dual structurally cannot: a
+primary tip **rotates**, so with `angleControl: direction` the texture
+follows the hand instead of being pinned to the canvas. Measured on a
+curved stroke with the same corduroy spectrum, and with a tip re-solved for
+`n̄ ≈ 1` (a mask tip's alpha is wrong here — it was computed for a 12-deep
+stack and paints nearly transparent):
+
+| | grain direction | texture | tone |
+| --- | --- | --- | --- |
+| dual gate | canvas-fixed | full | independent of stroke density |
+| primary, spacing 0.30 | **follows the stroke** | full, bristly | set by flow |
+| primary, spacing 0.18 | follows | softening | darker |
+| primary, spacing 0.10 | follows | smoothed to silk | darkest |
+
+The last row is the cost, and it is the same law as everywhere else on this
+page: overlap averages, and here the averaging happens *in the paint*, so
+texture contrast and stroke density are one dial rather than two. The dual
+gate multiplies the texture in **once**, which is exactly why its contrast
+does not care how many dabs landed. Put a print on the primary and it is
+worse than softened — labyrinth on the primary beads into a regular lattice
+and the train's own comb becomes visible, because a union of a connected
+structure is not that structure.
+
+So the two are complementary, not alternatives:
+
+> **Put a texture on the primary when its direction matters more than its
+> tone** — fibre, hair, bristle, grain that should turn with the wrist.
+> **Put it in the dual when its structure matters more than its direction**
+> — prints, cellular networks, and any "damage over an intact material"
+> reading, where tone must hold independent of how heavily the stroke is
+> laid.
+
+A primary-tip texture also frees the dual slot for a second one, and takes
+the whole Shape Dynamics panel — size, roundness and angle jitter, pressure,
+tilt — on the texture itself rather than on a round stamp.
+
+### 5.5 Consequences for the train
 
 The count variance is what remains. `n(x)` decorrelates over one stamp
 footprint, so its wander arrives as light and dark discs at *exactly stroke
@@ -396,7 +437,7 @@ size of the gain before the brush was painted.
 
 Two families needed their rigid train tightened past the default (woodgrain
 to spacing 0.14, drape to 0.18): a scale-free wedge carries coarse power
-exactly where §5.4's count staircase sits, and the residual line was audible
+exactly where §5.5's count staircase sits, and the residual line was audible
 at 7–9% of tone until the overlap was deepened.
 
 ## 10. Open problems

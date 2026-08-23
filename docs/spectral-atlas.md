@@ -335,6 +335,14 @@ from soft-focus to granular without touching its depth.
   synthesis. Warping bends crests already laid down; a rotating axis would
   keep them locally straight while the *direction* drifts — closer to
   bedding, brushed curves, and hair.
+* **A fibre family on the PRIMARY train.** A primary tip rotates, so
+  `angleControl: direction` makes a directional texture follow the hand
+  rather than stay pinned to the canvas — the one thing the dual gate cannot
+  do, and the standing caveat on every wedge in this atlas (§2). Tested on
+  corduroy and it works well at spacing ≈ 0.3; the cost is that union
+  averages in the paint, so texture contrast and stroke density stop being
+  separate dials (whitepaper §5.4). It needs tips re-solved for `n̄ ≈ 1`, so
+  it is a second family rather than a setting on this one.
 * **Two-material spectra.** Every entry here is one material. A spectrum
   whose two components have different *tonal* treatments — one rank, one
   lognormal — has not been tried and is the obvious way to get corrosion
