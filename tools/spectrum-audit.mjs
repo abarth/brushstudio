@@ -114,11 +114,14 @@ const coverageOf = (alpha) => {
  *   train survives the across-band average coherently and stands above
  *   its neighbourhood; broadband texture is its own neighbourhood and
  *   cancels out of the excess.
- * - `texturePct`: RMS of the core rows' tone over the texture band
- *   (5-30 c/dia), as percent of tone — the contrast the mark actually
- *   delivers. It is the third leg of the train trade (docs §6): overlap
- *   buys down ripple and comb at `1/sqrt(n)`, and spends this at the same
- *   rate.
+ * - `texturePct`: RMS of the core's tone over the texture band (5-30
+ *   c/dia), as percent of tone — the contrast the mark actually delivers.
+ *   It is the third leg of the train trade (docs §6): overlap buys down
+ *   ripple and comb at `1/sqrt(n)`, and spends this at the same rate.
+ *   Measured on tiled 2-D windows rather than along the stroke, because
+ *   half the collection is directional now and a row-wise measure is blind
+ *   to crests that run ALONG the mark — it read a wedge turned 90° as
+ *   having lost half its contrast when nothing had changed but the angle.
  */
 function strokeStats(alpha, w, hh, d, stampD) {
   const rowMean = new Float64Array(hh);
@@ -197,28 +200,40 @@ function strokeStats(alpha, w, hh, d, stampD) {
   }
   const amp = (2 * best) / n / 0.5; // undo 1/N and the Hann coherent gain
 
-  // delivered texture contrast: per-row band power over the core, averaged
+  // delivered texture contrast: band power over tiled 2-D windows of the
+  // core, so the measure does not care which way the structure runs
+  const W = 64;
+  const yMid = Math.max(y0, Math.min(y1 - W + 1, ((y0 + y1 - W) >> 1) + 1));
   let bandPow = 0;
-  for (let y = y0; y <= y1; y++) {
-    const rr = new Float64Array(n);
-    const ri = new Float64Array(n);
-    let rowMeanTone = 0;
-    for (let i = 0; i < n; i++) rowMeanTone += alpha[y * w + x0 + off + i];
-    rowMeanTone /= n;
-    for (let i = 0; i < n; i++) {
-      const win = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (n - 1));
-      rr[i] = (alpha[y * w + x0 + off + i] - rowMeanTone) * win;
+  let tiles = 0;
+  for (let tx = x0 + off; tx + W <= x0 + off + n; tx += W) {
+    const re2 = new Float64Array(W * W);
+    const im2 = new Float64Array(W * W);
+    let m = 0;
+    for (let yy = 0; yy < W; yy++) for (let xx = 0; xx < W; xx++) m += alpha[(yMid + yy) * w + tx + xx];
+    m /= W * W;
+    for (let yy = 0; yy < W; yy++) {
+      const wy = 0.5 - 0.5 * Math.cos((2 * Math.PI * yy) / (W - 1));
+      for (let xx = 0; xx < W; xx++) {
+        const wx = 0.5 - 0.5 * Math.cos((2 * Math.PI * xx) / (W - 1));
+        re2[yy * W + xx] = (alpha[(yMid + yy) * w + tx + xx] - m) * wx * wy;
+      }
     }
-    fft(rr, ri);
+    fft2d(re2, im2, W);
     let p = 0;
-    for (let k = 1; k < n / 2; k++) {
-      const c = (k / n) * d;
-      // Hann power gain 0.375; the factor 2 folds the negative frequencies
-      if (c >= 5 && c <= 30) p += (2 * (rr[k] * rr[k] + ri[k] * ri[k])) / (n * n) / 0.375;
+    for (let yy = 0; yy < W; yy++) {
+      const fy = binFreq(yy, W);
+      for (let xx = 0; xx < W; xx++) {
+        if (xx === 0 && yy === 0) continue;
+        const c = Math.hypot(binFreq(xx, W), fy) * d; // cycles per diameter
+        // Hann² power gain 0.375² over the two axes
+        if (c >= 5 && c <= 30) p += (re2[yy * W + xx] ** 2 + im2[yy * W + xx] ** 2) / (W * W) ** 2 / 0.375 ** 2;
+      }
     }
     bandPow += p;
+    tiles++;
   }
-  bandPow /= y1 - y0 + 1;
+  bandPow /= Math.max(tiles, 1);
 
   return {
     tone: tone / 255,
