@@ -35,7 +35,8 @@ npm run brush -- measure brushes/x.json                # numbers, not impression
 npm run brush -- compare brushes/x.json --ref refs/P.abr#"Name"
 npm run brush -- inspect refs/P.abr --json             # read a pack apart
 npm run brush -- export  brushes/ -o out/P.abr         # a dir, docs or a pack
-npm run dev                                            # paint with it by hand
+npm run brush -- export  brushes/spectral.pack.json -o out/SpectralTextures.abr
+npm run dev                                            # paint by hand; carries the spectrum lab
 
 node tools/fractal-tip.mjs tips/x.spec.json --calibrate  # synthesize + calibrate texture tips
 node tools/spectrum-audit.mjs brushes/x.json             # comb/spike/isotropy/β on painted marks

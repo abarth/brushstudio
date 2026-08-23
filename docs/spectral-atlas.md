@@ -254,6 +254,17 @@ Exploration specs carry no `tonal.gain`, so the preview shows the design
 itself. Add `gain ≈ 3` and `floor 0.02` when promoting, so the deep train
 delivers that design rather than a flattened version of it (math doc §6).
 
+**Or sweep it by hand.** `npm run dev` carries a **spectrum lab**: the same
+parameters as a popover, synthesizing a tip you can immediately paint with,
+with `copy spec` for the JSON and `keep` to write `tips/<name>.spec.json`,
+all three depths, and the brush documents straight into the repo — the new
+family is in the library on the next reload. The lab does not reimplement
+the synthesis; each preview is a real `tools/fractal-tip.mjs` run behind a
+dev-server endpoint (`tools/lib/lab.mjs`), at 512px rather than 1024 so it
+comes back in about a second. A browser reimplementation would drift from
+the tool that made the shipped tips, and a lab that misrepresents what a
+spec paints is worse than no lab.
+
 ## 6. The next group
 
 Eight candidates were swept, measured and left out of the twelve — not
