@@ -18,13 +18,48 @@ Sheets referenced throughout, all regenerable with the procedure in §5:
 `out/spectral-atlas{,-2,-3}.png` are the field tiles (groups A–G, H–J, K–O)
 and `out/spectral-atlas{,-2,-3}-strokes.png` the painted shortlists.
 
-## 0. Shortlist for promotion
+## 0. Promoted: the twelve
 
-**The directional group is the strongest thing in this atlas and is where to
-start when these become brushes.** It was not on the map at all until
-`sectorDeg` existed, it produced the highest delivered contrast of anything
-measured, and it covers material ground the shipped collection cannot reach —
-ripple, weave, drapery, flow, grain. Reviewed and wanted:
+Fifty-five spectra were swept across three rounds; twelve are now brush
+families, at `tips/<name>.spec.json` with 30/55/80 depth levels in
+`brushes/`. Sheets: `out/twelve-swatches.png`, `out/twelve-strokes.png`.
+
+| family | spectrum | train | texture % | reads as |
+| --- | --- | --- | --- | --- |
+| **flow** | ring k=10 + wedge 18° + warp | rigid | 15.9 | water surface, current, drift |
+| **whorl** | ring k=16 + wedge 12° + warp | rigid | 14.5 | fingerprint eddies, burl, turbulence |
+| **sand** | ring k=10 + wedge 18° | deep | 10.9 | rippled sand, with free dislocations |
+| **drape** | β=3.0 + wedge 22° + warp | rigid 0.18 | 10.4 | hanging cloth |
+| **corduroy** | ring k=16 + wedge 12° | deep | 9.9 | combed clay, drawn fibre |
+| **woodgrain** | β=2.6 + wedge 14° + warp | rigid 0.14 | 9.7 | grain round a knot, smoke curl |
+| **reticule** | ring k=16 | deep | 9.6 | pumice, coral rag, even pitting |
+| **tooth** | near-white 12–70 c/dia | deep | 8.8 | paper tooth, spray, film grain |
+| **labyrinth** | ring k=8 | deep | 8.0 | brain coral, dense foam |
+| **herringbone** | two wedges at ±40° | deep | 7.9 | crosshatch, woven mesh |
+| **strata** | coarse ×9 + thin grain | deep | 6.6 | bedded sediment, weathered plank |
+| **vesicle** | ring k=16 + lognormal σ=0.8 | deep | 4.4 | vesicular basalt, beaded glaze |
+
+Every one clears §7's bars at depth 0.55 (ripple 1.1–2.8%, comb p-p
+0.8–3.7%). Two needed their rigid train tightened past the family default
+to get there — woodgrain to spacing 0.14, drape to 0.18 — because a
+scale-free wedge carries coarse power right where the count staircase sits.
+
+The selection weighted three things: measured delivered contrast, distinct
+material territory (no two of the twelve are the same idea at different
+settings), and review — the directional group, the rings and the lognormal
+mapping were all asked for by name.
+
+**Held in reserve**, measured and ready but not promoted: swell (crossing
+wave trains, 7.7%), brushed panel (9.5%), the wedge-width dial as a family
+axis in its own right, vapour, frost, cut-8 soft focus, the 3-rung ladder,
+and the σ=0.45 cascade. The notes below are what they are for.
+
+### Why the directional group led the selection
+
+It was not on the map at all until `sectorDeg` existed, it produced the
+highest delivered contrast of anything measured, and it covers material
+ground the shipped collection cannot reach — ripple, weave, drapery, flow,
+grain. As reviewed:
 
 | candidate | spectrum | texture % | note |
 | --- | --- | --- | --- |
@@ -42,9 +77,10 @@ Behind it, the **ring** group (labyrinth k=8, reticulation k=16), the
 **ladder**, **tooth**, and the **lognormal cascade** as a mapping that
 applies across all of them.
 
-Two decisions are already made for whoever promotes these. The warped three
-ship on the **shallow rigid train**, not the deep one (§4). And the crest
-axis is a design choice per brush, not a default (§2).
+Two decisions carried into the promotion. The warped families ship on the
+**shallow rigid train**, not the deep one (§4). And the crest axis is a
+design choice per brush, not a default (§2) — all twelve currently run
+their wavevector along x, so the grain crosses a horizontal stroke.
 
 ## 1. What makes a spectrum *fractal*
 

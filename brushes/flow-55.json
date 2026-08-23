@@ -1,0 +1,38 @@
+{
+  "name": "Flow 55",
+  "id": "flow-55",
+  "notes": "Water surface, current, drifted snow: the sand spectrum put through a domain warp, which bends straight crests into flow lines. A stationary spectrum has no large-scale organisation by construction; the warp is the one way to give it some. TONAL dual-gate: the mask is the tone-mapped field itself, so the stroke carries the texture as graded alpha and the level number is the damage/modulation DEPTH. Rides the SHALLOW RIGID train (dual scatter 0.2, spacing 0.28, n=3) because the warp makes its curves PHASE structure, and a deep train averages independent windows and blends curves away. Measured both ways on this family: three-quarters more delivered contrast on the rigid train at equal ripple (docs/spectral-atlas.md §4). tonal.gain 1.7 is the shallower train's compensation. Tip from tips/flow.spec.json; audited by tools/spectrum-audit.mjs.",
+  "tips": {
+    "mask": {
+      "image": "../tips/flow-55.png"
+    }
+  },
+  "settings": {
+    "tip": {
+      "shape": "round",
+      "size": 120,
+      "hardness": 0.85,
+      "spacing": 0.12
+    },
+    "shape": {
+      "enabled": true,
+      "sizeControl": {
+        "source": "pressure",
+        "fadeSteps": 25
+      },
+      "sizeJitter": 0.15,
+      "minDiameter": 0.45
+    },
+    "dual": {
+      "enabled": true,
+      "shape": "@mask",
+      "size": 156,
+      "spacing": 0.28,
+      "scatter": 0.2,
+      "bothAxes": true,
+      "count": 1,
+      "mode": "multiply"
+    },
+    "flow": 0.9
+  }
+}

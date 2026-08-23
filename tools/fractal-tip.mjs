@@ -897,8 +897,9 @@ const vignette = (() => {
  * 1 = fully carved. Shared by the tip synthesis and the `--field` preview,
  * so what the atlas shows and what the brush paints are the same function.
  */
-function damageMap(field, sorted) {
-  const t = spec.tonal ?? {};
+function damageMap(field, sorted, { ignoreGain = false } = {}) {
+  const t0 = spec.tonal ?? {};
+  const t = ignoreGain ? { ...t0, gain: 1 } : t0;
   const mode = t.mode ?? 'modulate';
   const delta = mode === 'delta';
   const lo = delta ? sorted[Math.floor(sorted.length * 0.5)] : 0;
@@ -1252,7 +1253,10 @@ function toneBytes(field) {
 const fieldIdx = argv.indexOf('--field');
 if (fieldIdx >= 0) {
   const depth = Number(argv[fieldIdx + 1]) || 0.55;
-  const damage = damageMap(baseField, plateauSorted(baseField));
+  // gain is a compensation for the train's averaging, not a design choice:
+  // the stroke is meant to land on the UNGAINED design, so that is what a
+  // swatch should show
+  const damage = damageMap(baseField, plateauSorted(baseField), { ignoreGain: true });
   const bytes = new Uint8Array(N * N);
   for (let i = 0; i < damage.length; i++) {
     // ink = 1 − depth·damage; shown as ink on white, like every other crop

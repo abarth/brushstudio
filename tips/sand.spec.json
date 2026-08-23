@@ -1,0 +1,60 @@
+{
+ "name": "sand",
+ "notes": "Rippled sand: a narrow ring at 10 c/dia confined to an 18-degree wedge. The ring fixes one ripple wavelength, the wedge deletes every orientation but one, and random phase supplies the dislocations and Y-junctions a real ripple field has without any of it being modelled. Rides the DEEP scattered train (dual scatter 0.7, spacing 0.07, n=12): a stationary Gaussian field averages to the same field, so it can spend the overlap that buys full scatter (docs/spectral-atlas.md §4). tonal.gain 3 restores the log-contrast that averaging costs; tonal.floor 0.02 stops one stamp's field minimum punching a full-ink speck through the stack. From the spectral sweep in docs/spectral-atlas.md; levels 30/55/80 are damage DEPTH, not coverage - moderate damage renders as moderate contrast over intact paint. Verified by tools/spectrum-audit.mjs.",
+ "native": 1024,
+ "seed": 71000011,
+ "outDir": ".",
+ "spectrum": {
+  "bandLoCyclesPerDia": 6.2,
+  "shoulderCyclesPerDia": 10,
+  "lowSlope": 8,
+  "beta": 0,
+  "kneeCyclesPerDia": 10.5,
+  "beta2": 9,
+  "cutCyclesPerDia": 50,
+  "taperCyclesPerDia": 60,
+  "sectorDeg": 18
+ },
+ "vignette": {
+  "inner": 0.84,
+  "rag": 0.18
+ },
+ "aaCanvasPx": 0.7,
+ "train": {
+  "size": 120,
+  "flow": 0.9,
+  "primary": {
+   "hardness": 0.85,
+   "spacing": 0.12,
+   "sizeJitter": 0.15,
+   "minDiameter": 0.45
+  },
+  "dual": {
+   "sizeRatio": 1.3,
+   "spacing": 0.07,
+   "scatter": 0.7,
+   "count": 1
+  }
+ },
+ "levels": [
+  {
+   "coverage": 0.3,
+   "depth": 0.3
+  },
+  {
+   "coverage": 0.55,
+   "depth": 0.55
+  },
+  {
+   "coverage": 0.8,
+   "depth": 0.8
+  }
+ ],
+ "maskMode": "tonal",
+ "tonal": {
+  "mode": "modulate",
+  "gain": 3,
+  "floor": 0.02
+ },
+ "scatterDeconv": true
+}
