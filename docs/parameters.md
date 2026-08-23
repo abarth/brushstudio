@@ -89,6 +89,44 @@ per stamp, which enables depth jitter but makes the grain travel with the
 brush — right for a stamping tool, wrong for anything meant to read as paper
 showing through.
 
+### A canvas-registered texture repeats, and the pattern decides whether you see it
+
+Registered to the canvas means tiled across it: the pattern comes back every
+`native × texture.scale` px. That is unavoidable — it is a bitmap — and it is
+also not usually the problem. What a viewer notices is a *motif* returning on
+a grid, and recognising a motif needs a shape, which needs energy at a scale
+the eye can hold. Grain a few pixels across has no shape to recognise; a
+blotch twenty pixels across is a landmark, and it lands on that grid every
+time.
+
+So the number that predicts a visible repeat is not the tile length but **how
+much of the pattern's variance sits at canvas scales coarse enough to
+recognise** — `tools/spectrum-audit.mjs` reports it as `coarse %`, the share
+at 8 canvas px and longer. Measured on the built-ins:
+
+| pattern, at a working scale | tile | coarse % |
+| --- | --- | --- |
+| `clouds` 0.4 | 102px | 98.6 |
+| `paper` 1.0 | 256px | 96.8 |
+| `linen` 0.5 | 256px | 94.5 |
+| `paper` 0.4 | 102px | 71.2 |
+| `speckle` 0.5 | 128px | 19.9 |
+| synthesized band-limited tooth 0.5 | 256px | 0.0 |
+
+Note what raising `scale` does: it lengthens the tile *and* moves the
+pattern's coarse octaves up into the visible range, so `paper` at 1.0 repeats
+worse than at 0.4 despite the longer period. Scale is not the lever.
+
+The lever is the pattern. `tools/tile-pattern.mjs` synthesizes one from a
+spectral band stated in canvas pixels, with a hard zero below the band, so
+every lattice line coarse enough to carry a motif is exactly zero. The FFT
+grid is periodic by construction, so seamlessness comes free.
+
+The cost is honest and worth stating: paper's own cloudiness *is*
+low-frequency content, so a tooth that cannot repeat visibly also cannot be
+cloudy. Large-scale variation has to come from something that does not tile —
+in a drawing, the hand.
+
 ## The controls
 
 Every dynamic has a **Control** source, which is the same list everywhere:

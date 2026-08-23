@@ -5,6 +5,7 @@
  *
  *   node tools/spectrum-audit.mjs brushes/oil-sponge-50.json [...]
  *   node tools/spectrum-audit.mjs brushes/ --out out/audit
+ *   node tools/spectrum-audit.mjs brushes/x.json --pressure 0.35
  *
  * For each brush this paints (CPU renderer, fixed seeds):
  *
@@ -32,13 +33,19 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { binFreq, encodeGrayPng, fft, fft2d, mulberry32 } from './lib/dsp.mjs';
+import { binFreq, encodeGrayPng, fft, fft2d, mulberry32, patternTile } from './lib/dsp.mjs';
 import { loadDocs } from './lib/docs.mjs';
 import { loadCpuHarness } from './lib/harness.mjs';
 
 const argv = process.argv.slice(2);
 const outIdx = argv.indexOf('--out');
 const OUT = outIdx >= 0 ? argv.splice(outIdx, 2)[1] : 'out/audit';
+const pIdx = argv.indexOf('--pressure');
+// What the fill is drawn at. 0.8 is the default and what every recorded
+// number in the docs was taken at; a tonal brush wants less, because a
+// pencil scribbled over a region at 80% goes black and a saturated patch
+// has no texture left in it to measure.
+const PATCH_PRESSURE = pIdx >= 0 ? Number(argv.splice(pIdx, 2)[1]) : 0.8;
 const paths = argv.filter((a) => !a.startsWith('--'));
 if (!paths.length) {
   console.error('usage: node tools/spectrum-audit.mjs <brush.json | dir> [--out dir]');
@@ -70,16 +77,26 @@ async function paintStroke(settings, d) {
 }
 
 /**
- * Fill a region with parallel strokes. Rows sit ~0.55·d apart with their
- * y jittered and their x phase randomized per row, alternating direction —
- * covering the canvas the way a hand would, without a row lattice.
+ * Fill a region with parallel strokes. Rows sit ~0.42 of a mark apart with
+ * their y jittered and their x phase randomized per row, alternating
+ * direction — covering the canvas the way a hand would, without a row
+ * lattice.
+ *
+ * `markPx` is the width the brush actually draws, not the tip box, and the
+ * two are not the same thing: an elliptical tip pulled along its long axis
+ * lays a mark a fraction of its own diameter wide, and rows pitched to the
+ * diameter then leave stripes of bare paper. A striped patch is not a
+ * filled region — its spectrum is dominated by the stripes, and every
+ * measure below is then reporting the fill procedure instead of the brush.
+ * Capped at `d` so a scattered brush, whose mark is far wider than its tip,
+ * keeps the spacing it always had.
  */
-async function paintPatch(settings, d) {
+async function paintPatch(settings, d, markPx) {
   const size = FFT_N + Math.ceil(d * 3);
   const surface = await h.Surface.create(size, size);
   const rng = mulberry32(97);
   const step = Math.max(1.5, d / 14);
-  const rowGap = 0.42 * d;
+  const rowGap = 0.42 * Math.min(d, markPx || d);
   let row = 0;
   for (let y = d * 0.5; y < size - d * 0.3; y += rowGap * (0.75 + 0.6 * rng())) {
     const dir = row++ % 2 === 0 ? 1 : -1;
@@ -87,11 +104,26 @@ async function paintPatch(settings, d) {
     const pts = [];
     const yy = y + (rng() - 0.5) * 0.5 * d;
     for (let x = 0; x <= size + 2 * d; x += step) {
-      pts.push({ x: x0 + dir * x, y: yy, pressure: 0.8, tiltX: 0, tiltY: 0, twist: 0 });
+      pts.push({ x: x0 + dir * x, y: yy, pressure: PATCH_PRESSURE, tiltX: 0, tiltY: 0, twist: 0 });
     }
     surface.paint(settings, pts, { seed: 1000 + row });
   }
   return { alpha: await surface.readAlpha(), w: size, h: size };
+}
+
+/** Half-peak width of a flat horizontal stroke, in px — the mark, not the box. */
+function markWidth(alpha, w, hh) {
+  const rowMean = new Float64Array(hh);
+  for (let y = 0; y < hh; y++) {
+    let sum = 0;
+    for (let x = 0; x < w; x++) sum += alpha[y * w + x];
+    rowMean[y] = sum / w;
+  }
+  const peak = Math.max(...rowMean);
+  if (peak <= 0) return 0;
+  let n = 0;
+  for (let y = 0; y < hh; y++) if (rowMean[y] > 0.5 * peak) n++;
+  return n;
 }
 
 const coverageOf = (alpha) => {
@@ -447,8 +479,16 @@ for (const brush of resolved) {
   const name = basename(id);
 
   const stroke = await paintStroke(settings, d);
-  const patch = await paintPatch(settings, d);
+  const markPx = markWidth(stroke.alpha, stroke.w, stroke.h);
+  const patch = await paintPatch(settings, d, markPx);
   const field = centerWindow(patch.alpha, patch.w, patch.h, FFT_N);
+  // A canvas-registered texture repeats every pattern-tile x scale px; one
+  // applied per stamp travels with the mark and has no canvas lattice.
+  const tex = settings.texture;
+  const tile =
+    tex.enabled && !tex.textureEachTip
+      ? patternTile(h.getPattern(tex.pattern), tex.scale)
+      : null;
   const a = audit(field, FFT_N, d);
   const stampD = settings.dual?.enabled ? settings.dual.size : d;
   const s = strokeStats(stroke.alpha, stroke.w, stroke.h, d, stampD);
@@ -491,6 +531,8 @@ for (const brush of resolved) {
     'comb ×': a.combAlong.ratio.toFixed(1),
     'comb @': `${a.combAlong.k} c/dia`,
     'rows ×': a.combAcross.ratio.toFixed(1),
+    'tile': tile ? `${tile.periodPx.toFixed(0)}px` : '—',
+    'coarse %': tile ? tile.coarsePct.toFixed(1) : '—',
     'aniso dB': a.anisotropyDb.toFixed(1),
     tone: s.tone.toFixed(3),
     'ripple %': s.ripplePct.toFixed(1),
@@ -499,7 +541,9 @@ for (const brush of resolved) {
   });
   console.log(
     `${name}: β=${a.beta.toFixed(2)}, spike ${a.worstSpike.ratio.toFixed(1)}× @${a.worstSpike.k}c/dia, ` +
-      `comb ${a.combAlong.ratio.toFixed(1)}× @${a.combAlong.k}c/dia, aniso ${a.anisotropyDb.toFixed(1)}dB | ` +
+      `comb ${a.combAlong.ratio.toFixed(1)}× @${a.combAlong.k}c/dia, ` +
+      (tile ? `tile ${tile.periodPx.toFixed(0)}px ${tile.coarsePct.toFixed(1)}% coarse, ` : '') +
+      `aniso ${a.anisotropyDb.toFixed(1)}dB | ` +
       `stroke tone ${s.tone.toFixed(3)}, ripple ${s.ripplePct.toFixed(1)}%, comb p-p ${s.combPpPct.toFixed(1)}% @${s.combAtCPerDia}c/dia, ` +
       `texture ${s.texturePct.toFixed(1)}%`,
   );
