@@ -374,4 +374,4 @@ export const CATALOG = {
 export { renderPlate, renderTipSheet, measureBrush, resolveBrush, diffFromDefaults };
 export { describeBrush, explainBrush, defaultBrush, makeBrush };
 export { Surface, backendFactory, cpuBackend } from './surface';
-export { getTip, registerTip, registerPattern } from '../brush/patterns';
+export { getTip, getPattern, registerTip, registerPattern } from '../brush/patterns';

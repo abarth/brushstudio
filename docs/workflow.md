@@ -63,6 +63,8 @@ judge. The numbers settle the objective failures outright:
 | `coverage` high, `density` low | a uniform veil, not paint |
 | `coverage` low, `density` high | scattered strands of solid colour |
 | `seed spread` cv near 0 | the random dynamics are not doing anything |
+| `pen pose` anisotropy near 1 | how the pen is held does not change the mark — a round tip, or a facet too shallow to read |
+| `pen pose` "fixed to the canvas, not the pen" | the width depends on the heading but not on the pen: the tip's angle is a constant |
 
 Fix what the numbers say, then measure again. Do not take a brush to review
 with a warning still on it unless the warning is the design.

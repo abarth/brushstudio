@@ -55,6 +55,14 @@ function trace(
   return out;
 }
 
+/**
+ * The pen pose the `pose` fan is drawn with: laid over far enough that a
+ * real pencil would be riding on its worn facet rather than its point, and
+ * eight headings per band, which resolves the narrow axis to 22.5 degrees.
+ */
+const POSE_TILT = 45;
+const POSE_HEADINGS = 8;
+
 export const TEST_STROKES: TestStroke[] = [
   {
     id: 'dabs',
@@ -213,6 +221,45 @@ export const TEST_STROKES: TestStroke[] = [
           tiltY: 0,
         })),
       ];
+    },
+  },
+  {
+    id: 'pose',
+    label: 'pose fan — one pen pose held, heading turned 0 → 180° (top: barrel right · bottom: barrel down)',
+    reveals: "whether the mark follows the pen's pose: a facet tip runs narrow along the barrel and wide across it",
+    rowHeight: (size, reach) => Math.max(reach * 3.4, size * 5, 210),
+    paths: (box, size) => {
+      const out: PointerSample[][] = [];
+      const bandH = box.height / 2;
+      const cellW = box.width / POSE_HEADINGS;
+      const len = Math.min(cellW, bandH) * 0.8;
+      const step = Math.max(1.5, size / 12);
+      // Two barrel directions, because one fan cannot tell the two cases
+      // apart: a tip at a fixed angle draws exactly the same fan whatever
+      // the pen is doing. Only a tip bound to the pose keeps its narrow
+      // mark on the barrel when the barrel moves, so the second band
+      // repeats the first band's pen-relative headings with the pen turned
+      // 90 degrees — the two bands match if and only if the tip follows.
+      [0, 90].forEach((azimuth, band) => {
+        const tiltX = POSE_TILT * Math.cos((azimuth * Math.PI) / 180);
+        const tiltY = POSE_TILT * Math.sin((azimuth * Math.PI) / 180);
+        const cy = box.y + bandH * (band + 0.5);
+        for (let i = 0; i < POSE_HEADINGS; i++) {
+          const heading = ((azimuth + (i * 180) / POSE_HEADINGS) * Math.PI) / 180;
+          const cx = box.x + cellW * (i + 0.5);
+          const pts: PointerSample[] = [];
+          for (let d = -len / 2; d <= len / 2; d += step) {
+            pts.push(
+              sample(cx + Math.cos(heading) * d, cy + Math.sin(heading) * d, 0.8, {
+                tiltX,
+                tiltY,
+              }),
+            );
+          }
+          out.push(pts);
+        }
+      });
+      return out;
     },
   },
   {

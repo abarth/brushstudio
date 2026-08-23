@@ -1,0 +1,18 @@
+{
+  "name": "paper-tooth",
+  "notes": "A paper tooth for canvas-registered texture that cannot be caught repeating. The built-in `paper` puts 71% of its variance at canvas scales of 8px and coarser at its working scale, and a 256px bitmap at scale 0.4 brings that blotch back every 102px: shade a large region and the grid is plainly there. This is the same tooth with the coarse half deleted — a hard spectral floor at 6.5 canvas px, so every tile-lattice line that could carry a recognisable motif is exactly zero rather than merely small.\n\nThe band is 2.4-6.5px on canvas at scale 0.5, which is the fine octave the original brief asked for (several cycles across a 10px lead) and nothing else. The top end stops short of the 2px canvas Nyquist so scaling does not alias. beta 0.8 is nearly flat across the band: within two and a half octaves the slope barely matters, and flat keeps the finest end from being swamped.\n\nnative 512 at scale 0.5 gives a 256px repeat, 2.5x longer than the built-in's, but the length is not what fixes this — the emptiness below 6.5px is. With 0% of the variance coarse enough to recognise, the period could be 64px and still not read. 1024 native at scale 0.25 measures identically on every count and costs 750KB more in the exported pack, which is the whole reason 512 is what ships: the tile only has to be long enough to hold the band, and this band is 2.4px wide at the fine end.\n\nWHAT THIS COSTS. Paper's cloudiness IS low-frequency content, so a tooth that cannot repeat visibly also cannot be cloudy: this is even tooth, not handmade-paper mottle. Large-scale variation has to come from something that does not tile, and in a drawing that is the hand — pressure, overlap, where the strokes went. If mottle is wanted back, it wants a mechanism that travels with the work rather than with the canvas.",
+  "native": 512,
+  "seed": 20260823,
+  "scale": 0.5,
+  "out": "paper-tooth.png",
+  "band": {
+    "loPx": 6.5,
+    "hiPx": 2.4,
+    "beta": 0.8,
+    "shoulderOctaves": 0.4
+  },
+  "tone": {
+    "mean": 0.537,
+    "contrast": 0.093
+  }
+}

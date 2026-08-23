@@ -71,7 +71,18 @@ function controlAngle(ctrl: DynamicControl, ctx: StampContext, base: number): nu
     case 'rotation':
       return base + (ctx.sample.twist / 360) * TAU;
     case 'tilt':
-      return base + Math.atan2(ctx.sample.tiltY, ctx.sample.tiltX);
+      // Pen Tilt on an angle is the tilt AZIMUTH — the compass direction the
+      // pen leans — plus a quarter turn, which is Photoshop's convention and
+      // not the obvious one: the tip's long axis comes out ACROSS the lean,
+      // not along it. That is what a flat nib does when you tilt it (the
+      // disc foreshortens along the lean, so what is left is broadest across
+      // it), and it means a tip meant to lie ALONG the barrel — a pencil worn
+      // to a facet — wants 90 in tip.angle to put it back. Verified against
+      // Photoshop: without the quarter turn a tilt-bound facet imports 90
+      // degrees out. The SIGN of the quarter turn is not pinned by that test,
+      // because an ellipse at +90 and -90 is the same ellipse; it will only
+      // matter for a sampled tip that is not symmetric about its long axis.
+      return base + Math.atan2(ctx.sample.tiltY, ctx.sample.tiltX) + Math.PI / 2;
     case 'pressure':
     case 'fade':
       return base + controlFactor(ctrl, ctx) * TAU;

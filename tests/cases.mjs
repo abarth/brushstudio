@@ -113,6 +113,50 @@ export async function runCases(BS, backend = 'cpu') {
     );
   });
 
+  await test('a facet bound to the pen pose turns with the barrel', async () => {
+    // An elliptical tip already draws a narrow mark along its long axis and
+    // a wide one across it. What Pen Tilt on the angle adds is whose axis it
+    // is: the pen's, not the canvas's — so the same fan of headings has to
+    // come out the same when the barrel moves.
+    //
+    // Which way round it lands is Photoshop's convention and is pinned here
+    // in both directions, because it is not the obvious one: a bare tilt
+    // binding puts the long axis ACROSS the lean, and a tip meant to lie
+    // along the barrel needs 90 in tip.angle to get there.
+    const facet = { tip: { size: 24, roundness: 0.5, spacing: 0.05 } };
+    const tilt = { enabled: true, angleControl: { source: 'tilt', fadeSteps: 25 } };
+
+    const across = await measure(BS.makeBrush({ ...facet, shape: tilt }), { seeds: 1 });
+    assert(
+      across.pose.anisotropy > 1.3,
+      `a half-round facet measured only ${across.pose.anisotropy}x wide-to-narrow`,
+    );
+    assert(across.pose.followsPen, 'a tilt-bound facet did not follow the pen');
+    assert(
+      across.pose.narrowestDeg === 90,
+      `angle 0 should lay the facet across the lean, narrow at 90°, not ${across.pose.narrowestDeg}°`,
+    );
+
+    const along = await measure(
+      BS.makeBrush({ tip: { ...facet.tip, angle: 90 }, shape: tilt }),
+      { seeds: 1 },
+    );
+    assert(along.pose.followsPen, 'the turned facet did not follow the pen');
+    assert(
+      along.pose.narrowestDeg === 0,
+      `angle 90 should lay the facet along the barrel, narrow at 0°, not ${along.pose.narrowestDeg}°`,
+    );
+
+    // the same ellipse pinned to the canvas: just as anisotropic, and the
+    // fan stays where it is when the pen turns
+    const pinned = await measure(BS.makeBrush(facet), { seeds: 1 });
+    assert(
+      pinned.pose.anisotropy > 1.3,
+      `the pinned control measured only ${pinned.pose.anisotropy}x`,
+    );
+    assert(!pinned.pose.followsPen, 'a fixed tip angle should not follow the pen');
+  });
+
   await test('spacing over 100% leaves gaps a stroke cannot fill', async () => {
     const tight = await measure(BS.makeBrush({ tip: { size: 40, spacing: 0.1 } }), { seeds: 1 });
     const loose = await measure(BS.makeBrush({ tip: { size: 40, spacing: 2 } }), { seeds: 1 });

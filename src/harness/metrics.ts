@@ -1,5 +1,6 @@
 import type { PointerSample } from '../brush/dynamics';
 import type { BrushSettings } from '../brush/types';
+import { brushReach } from './strokes';
 import { cpuBackend, Surface, type BackendFactory } from './surface';
 
 /**
@@ -20,7 +21,17 @@ export interface BandStats {
   density: number;
   /** mean alpha over the whole band: coverage * density */
   ink: number;
-  /** std/mean of alpha inside the mark — the grain of the mark */
+  /**
+   * std/mean of alpha inside the mark — the grain of the mark.
+   *
+   * Read it with care on a narrow mark. The band is everything above the
+   * ink floor, which on a soft tip includes the two rows of falloff at the
+   * edges, and on a mark only a few pixels wide those rows dominate the
+   * spread: whether they clear the floor flips on a fraction of a pixel of
+   * tip size, and the number can move several-fold without the texture
+   * changing at all. To ask what a texture is doing, measure the same
+   * stroke with `texture.enabled` off and compare the ink.
+   */
   grain: number;
 }
 
@@ -58,6 +69,28 @@ export interface DabStats {
   edgeWidth: number;
 }
 
+export interface PoseStats {
+  /** how far the pen was laid over for these marks, in degrees */
+  tiltDeg: number;
+  /**
+   * One straight stroke per heading, the heading measured from the pen's
+   * own barrel: 0 is drawn along the barrel (the way a pencil is pulled
+   * behind the hand), 90 across it.
+   */
+  headings: { offBarrelDeg: number; widthPx: number; ink: number }[];
+  /** widest heading over narrowest — 1 means the pose does not shape the mark */
+  anisotropy: number;
+  /** which heading came out narrowest, in degrees off the barrel */
+  narrowestDeg: number;
+  /**
+   * Whether that pattern belongs to the pen or to the canvas. The fan is
+   * drawn twice with the barrel 90 degrees apart: a tip bound to the pose
+   * keeps its narrow mark on the barrel and the two fans agree, a tip at a
+   * fixed angle keeps it on the canvas and they do not.
+   */
+  followsPen: boolean;
+}
+
 export interface BrushMetrics {
   size: number;
   flat: BandStats & { widthPx: number };
@@ -65,6 +98,8 @@ export interface BrushMetrics {
   dab: DabStats;
   /** measured ink of a single stroke, per pressure step 10%..100% */
   pressureResponse: { pressure: number; widthPx: number; ink: number }[];
+  /** width against heading for one fixed pen pose — what tilt does to a mark */
+  pose: PoseStats;
   /**
    * Ink after 1 / 2 / 4 passes over the same path. The ratio says whether
    * the brush keeps accumulating; the absolute ink says what it accumulates
@@ -301,6 +336,137 @@ function dabStats(alpha: Uint8Array, w: number, h: number, cx: number, cy: numbe
   };
 }
 
+/**
+ * The pen pose the fan is drawn with, and the headings it is drawn at.
+ *
+ * 45 degrees is a pencil riding on its worn facet rather than its point,
+ * and 30-degree steps resolve a narrow axis well enough to say which
+ * heading it is on without paying for twelve strokes.
+ */
+const POSE_TILT_DEG = 45;
+const POSE_HEADINGS = [0, 30, 60, 90, 120, 150];
+
+/**
+ * How wide a straight stroke is across its own direction.
+ *
+ * The plate's `flat` width is the ink box's height, which only means width
+ * for a horizontal stroke; a fan needs the same number for a stroke running
+ * any which way. Ink is binned by perpendicular distance from the stroke's
+ * spine over its steady middle, so the entry and exit dabs — which are
+ * round on a tapered brush and would widen the reading — stay out of it.
+ */
+function acrossWidth(
+  alpha: Uint8Array,
+  w: number,
+  h: number,
+  cx: number,
+  cy: number,
+  heading: number,
+  len: number,
+): { widthPx: number; ink: number } {
+  const dx = Math.cos(heading);
+  const dy = Math.sin(heading);
+  const half = len * 0.35;
+  const profile = new Map<number, number>();
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const a = alpha[y * w + x];
+      if (a === 0) continue;
+      const ux = x + 0.5 - cx;
+      const uy = y + 0.5 - cy;
+      if (Math.abs(ux * dx + uy * dy) > half) continue;
+      const k = Math.round(uy * dx - ux * dy);
+      profile.set(k, (profile.get(k) ?? 0) + a / 255);
+    }
+  }
+  if (profile.size === 0) return { widthPx: 0, ink: 0 };
+  const run = half * 2;
+  let peak = 0;
+  let ink = 0;
+  for (const v of profile.values()) {
+    const mean = v / run;
+    if (mean > peak) peak = mean;
+    ink += mean;
+  }
+  // A tenth of the mark's own peak, floored at the bare-paper level: a soft
+  // tip has no edge to find, and a scattered one throws single dabs well
+  // outside the mark that would otherwise count as its width.
+  const level = Math.max(INK_FLOOR / 255, peak * 0.1);
+  const kept = [...profile.entries()].filter(([, v]) => v / run >= level).map(([k]) => k);
+  if (kept.length === 0) return { widthPx: 0, ink: +ink.toFixed(3) };
+  return {
+    widthPx: Math.max(...kept) - Math.min(...kept) + 1,
+    ink: +ink.toFixed(3),
+  };
+}
+
+/**
+ * What the pen's pose does to the mark.
+ *
+ * Every other probe here paints with the pen upright, which is the honest
+ * default — most brushes ignore tilt — but it means a pose-driven brush
+ * measures identically to one that is not. This draws a fan of straight
+ * strokes with the pen held in one pose and the heading turning, twice,
+ * with the barrel 90 degrees apart. Width against heading says how much the
+ * pose shapes the mark; the two fans agreeing in pen-relative terms says
+ * the shaping belongs to the pen rather than to the canvas.
+ */
+async function poseResponse(
+  settings: BrushSettings,
+  backend: BackendFactory,
+  size: number,
+  reach: number,
+): Promise<PoseStats> {
+  const len = Math.max(size * 4, 48);
+  const pad = Math.min(reach, size * 2) + 20;
+  const side = Math.ceil(len + pad * 2);
+  const surface = await Surface.create(side, side, backend);
+  const c = side / 2;
+  const step = Math.max(1.5, size / 14);
+  const fans: { widthPx: number; ink: number }[][] = [];
+  for (const azimuth of [0, 90]) {
+    const tiltX = POSE_TILT_DEG * Math.cos((azimuth * Math.PI) / 180);
+    const tiltY = POSE_TILT_DEG * Math.sin((azimuth * Math.PI) / 180);
+    const fan: { widthPx: number; ink: number }[] = [];
+    for (const off of POSE_HEADINGS) {
+      const heading = ((azimuth + off) * Math.PI) / 180;
+      const pts: PointerSample[] = [];
+      for (let d = -len / 2; d <= len / 2; d += step) {
+        pts.push({
+          x: c + Math.cos(heading) * d,
+          y: c + Math.sin(heading) * d,
+          pressure: 0.8,
+          tiltX,
+          tiltY,
+          twist: 0,
+        });
+      }
+      surface.clear();
+      surface.paint(settings, pts, { seed: 55 });
+      fan.push(acrossWidth(await surface.readAlpha(), side, side, c, c, heading, len));
+    }
+    fans.push(fan);
+  }
+  surface.destroy();
+
+  const widths = fans[0].map((f) => f.widthPx);
+  const turned = fans[1].map((f) => f.widthPx);
+  const min = Math.min(...widths);
+  const max = Math.max(...widths);
+  const spread = max - min;
+  const disagreement = Math.max(...widths.map((v, i) => Math.abs(v - turned[i])));
+  return {
+    tiltDeg: POSE_TILT_DEG,
+    headings: POSE_HEADINGS.map((offBarrelDeg, i) => ({ offBarrelDeg, ...fans[0][i] })),
+    anisotropy: min > 0 ? +(max / min).toFixed(2) : 0,
+    narrowestDeg: POSE_HEADINGS[widths.indexOf(min)],
+    // A pixel of slop either way, and a third of the spread on top: the two
+    // fans are painted at different canvas angles, so a mark that is
+    // genuinely pen-bound still lands on the pixel grid differently.
+    followsPen: spread > 1 && disagreement <= Math.max(1.5, spread * 0.35),
+  };
+}
+
 const line = (
   x0: number,
   x1: number,
@@ -414,6 +580,14 @@ export async function measureBrush(
     });
   }
 
+  // --- what the pen's pose does to the mark --------------------------------
+  const pose = await poseResponse(
+    settings,
+    opts.backend ?? cpuBackend,
+    size,
+    brushReach(settings),
+  );
+
   const mean = seedInk.reduce((a, b) => a + b, 0) / Math.max(1, seedInk.length);
   const variance =
     seedInk.reduce((a, v) => a + (v - mean) ** 2, 0) / Math.max(1, seedInk.length);
@@ -432,6 +606,16 @@ export async function measureBrush(
     );
   }
   if (dab.peakAlpha < 0.05) warnings.push('a full-pressure dab is almost invisible');
+  if (settings.shape.enabled && settings.shape.angleControl.source === 'tilt') {
+    if (pose.anisotropy < 1.15) {
+      warnings.push(
+        'the tip angle follows the pen but the tip is too round for it to show — ' +
+          'lower tip.roundness or the pose is doing nothing',
+      );
+    } else if (!pose.followsPen) {
+      warnings.push('the mark changes with the heading but not with the pen — check the pose controls');
+    }
+  }
   const p10 = pressureResponse[0];
   const p100 = pressureResponse[9];
   if (p100.ink > 0 && p10.ink / p100.ink > 0.9 && settings.shape.enabled) {
@@ -456,6 +640,7 @@ export async function measureBrush(
     },
     dab,
     pressureResponse,
+    pose,
     buildup,
     seedSpread: { mean: +mean.toFixed(4), cv: +cv.toFixed(4) },
     warnings,

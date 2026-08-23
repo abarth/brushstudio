@@ -190,6 +190,57 @@ export function radialSpectrum(field, n, bins = 48) {
  * the same construction as src/brush/organicTips.ts, here for the field
  * generators that need angular structure a Gaussian field cannot make.
  */
+/**
+ * Will the texture's repeat be visible?
+ *
+ * A canvas-registered pattern tiles every `native x scale` px, and asking a
+ * painted mark about it is a poor way to find out: the tile line lands
+ * wherever the mark's own spectrum happens to be, so the same pattern reads
+ * as catastrophic at one scale and clean at another for reasons that have
+ * nothing to do with the pattern. The property belongs to the pattern, and
+ * in the pattern it is exact.
+ *
+ * A tiled field's spectrum is the pattern's own, sampled at multiples of
+ * 1/T. So every repeat is mathematically there — it is a bitmap — and what
+ * decides whether a viewer SEES one is whether the pattern carries anything
+ * at a scale coarse enough to read as a shape. Grain finer than a few pixels
+ * has no shape to recognise from one tile to the next; a blob twenty pixels
+ * across is a landmark, and the eye finds it again every T px.
+ *
+ * `coarsePct` is the share of the pattern's variance sitting at canvas
+ * wavelengths of `coarsePx` and longer — the part that can be recognised,
+ * hence the part that repeats visibly. It is the number to design against:
+ * drive it to zero and the tile period stops mattering.
+ */
+export function patternTile(map, scale, coarsePx = 8) {
+  const n = map.size;
+  if (n & (n - 1)) return null; // fft2d is radix-2
+  const periodPx = n * scale;
+  const re = new Float64Array(n * n);
+  const im = new Float64Array(n * n);
+  let mean = 0;
+  for (const v of map.data) mean += v;
+  mean /= map.data.length;
+  // No window: the pattern IS periodic, which is the whole point of it.
+  for (let i = 0; i < n * n; i++) re[i] = (map.data[i] - mean) / 255;
+  fft2d(re, im, n);
+  let total = 0;
+  let coarse = 0;
+  // a cycle count of k over the tile is a canvas wavelength of periodPx / k
+  const kMaxCoarse = periodPx / coarsePx;
+  for (let y = 0; y < n; y++) {
+    const fy = binFreq(y, n) * n; // cycles per tile
+    for (let x = 0; x < n; x++) {
+      if (x === 0 && y === 0) continue;
+      const k = Math.hypot(binFreq(x, n) * n, fy);
+      const p = re[y * n + x] ** 2 + im[y * n + x] ** 2;
+      total += p;
+      if (k <= kMaxCoarse) coarse += p;
+    }
+  }
+  return { periodPx, coarsePct: total > 0 ? (100 * coarse) / total : 0, coarsePx };
+}
+
 export function makeWorley(rng, cells) {
   const jitter = new Float64Array(cells * cells * 2);
   const value = new Float64Array(cells * cells);

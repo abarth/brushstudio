@@ -54,7 +54,7 @@ const defaultOut = (name) => join(OUT_DIR, name);
 // Kept in step with src/harness/strokes.ts by the `list` command, which is
 // the only place the real catalogue is read.
 const PLATE_STROKE_IDS = [
-  'dabs', 'flat', 'taper', 'ladder', 'curves', 'crosshatch', 'wash', 'tilt', 'speed',
+  'dabs', 'flat', 'taper', 'ladder', 'curves', 'crosshatch', 'wash', 'tilt', 'pose', 'speed',
 ];
 /** `--strokes all` draws every test mark there is. */
 const strokeFlag = () => {
@@ -231,6 +231,16 @@ async function main() {
         console.log(
           `  pressure       width ${pr.map((p) => p.widthPx).join('/')}px  ` +
             `ink ${pr.map((p) => p.ink.toFixed(2)).join('/')}`,
+        );
+        const pose = m.pose;
+        console.log(
+          `  pen pose       width ${pose.headings.map((p) => p.widthPx).join('/')}px at ` +
+            `${pose.headings.map((p) => p.offBarrelDeg).join('/')}° off the barrel, pen ` +
+            `laid over ${pose.tiltDeg}° · ${pose.anisotropy}x wide-to-narrow` +
+            (pose.anisotropy >= 1.15
+              ? `, narrowest at ${pose.narrowestDeg}° · ` +
+                (pose.followsPen ? 'the fan turns with the pen' : 'fixed to the canvas, not the pen')
+              : ' · the pose does not shape the mark'),
         );
         console.log(
           `  build-up       1/2/4 passes → ink ` +

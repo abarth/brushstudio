@@ -57,6 +57,7 @@ export {
   describeBrush,
   diffFromDefaults,
   explainBrush,
+  getPattern,
   getTip,
   makeBrush,
   measureBrush,
