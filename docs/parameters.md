@@ -98,7 +98,7 @@ Every dynamic has a **Control** source, which is the same list everywhere:
 | `off` | nothing | the value is used flat |
 | `fade` | stamp count | dies out over `fadeSteps` spacing steps |
 | `pressure` | stylus pressure | the default for size and flow |
-| `tilt` | how far the pen is laid over | 0 at upright, 1 at 60° |
+| `tilt` | how far the pen is laid over | 0 at upright, 1 at 60° — but on an **angle** it is the tilt *azimuth* instead: the tip turns to point where the pen leans |
 | `rotation` | barrel rotation / twist | rarely available on cheap tablets |
 | `direction` | stroke tangent | rotates a tip to follow the path |
 | `initial-direction` | tangent at pen-down | fixes an orientation per stroke |
@@ -112,6 +112,46 @@ Two traps:
 * **`tilt` needs a stylus.** A mouse reports no tilt, so a tilt-driven brush
   measures as a dead flat row on the `tilt` test stroke. That is the tool,
   not the brush.
+
+### Pose: making the mark depend on how the pen is held
+
+A pencil worn to a facet does not draw the same line in every direction. Pull
+it along the barrel and the mark is one lead wide; push it sideways and the
+mark is the whole worn face. The engine can do that, and it is two settings:
+
+* `shape.angleControl` on `tilt`, which turns the tip to the **azimuth** —
+  the compass direction the pen leans — so the tip's long axis lies along the
+  barrel's shadow on the page, where a worn facet's long axis actually is.
+* `tip.roundness` under 1, to give the ellipse something to be narrow about.
+
+Three things about it are worth knowing before reaching for it.
+
+**Direction is not a substitute.** `direction` turns the tip to follow the
+path, so the mark comes out the *same* width through every heading — the
+exact opposite. Pose sources (`tilt`, `rotation`) hold the tip still in canvas
+space while the stroke turns around it, which is what makes the width vary.
+
+**Size is the ellipse's long axis.** Roundness squashes the short one, so
+dropping roundness to 0.6 thins the everyday line by 40%. To flatten a tip
+without changing the line it already draws, scale `tip.size` by `1 / roundness`
+at the same time. Note that `texture.scale` should *not* follow that resize:
+the mark on the paper did not get bigger, only the number the engine calls
+Size did.
+
+**Roundness under tilt ramps the wrong way for a pencil.** Every Control
+scales its parameter *up* with its input, so roundness bound to `tilt` is
+flattest upright and roundest laid over — right for a chisel marker held on
+its corner, backwards for graphite, which flattens as the grip lays over.
+There is no way to invert it, so a facet's depth has to be a constant. (This
+is unverified against Photoshop: we write a `tiltScale` of 200% into the .abr
+and never read one back, and 200% is exactly what would make `cos(2 × tilt)`
+reach flat at 45°. If Photoshop flattens with tilt, the engine is the one
+that is wrong.)
+
+At zero tilt there is no azimuth to read — `atan2(0, 0)` is 0 — so a mouse,
+or a pen held dead upright, gets the facet lying along the canvas x-axis.
+Every probe in `measure` except the pose fan paints at zero tilt, so a
+pose-driven brush's other numbers describe it pulled *along* its facet.
 
 ## Opacity vs. flow
 

@@ -113,6 +113,39 @@ export async function runCases(BS, backend = 'cpu') {
     );
   });
 
+  await test('a facet bound to the pen pose turns with the barrel', async () => {
+    // An elliptical tip already draws a narrow mark along its long axis and
+    // a wide one across it. What Pen Tilt on the angle adds is whose axis it
+    // is: the pen's, not the canvas's — so the same fan of headings has to
+    // come out the same when the barrel moves.
+    const facet = { tip: { size: 24, roundness: 0.5, spacing: 0.05 } };
+    const bound = await measure(
+      BS.makeBrush({
+        ...facet,
+        shape: { enabled: true, angleControl: { source: 'tilt', fadeSteps: 25 } },
+      }),
+      { seeds: 1 },
+    );
+    assert(
+      bound.pose.anisotropy > 1.3,
+      `a half-round facet measured only ${bound.pose.anisotropy}x wide-to-narrow`,
+    );
+    assert(
+      bound.pose.narrowestDeg === 0,
+      `the narrow mark should run along the barrel, not at ${bound.pose.narrowestDeg}°`,
+    );
+    assert(bound.pose.followsPen, 'a tilt-bound facet did not follow the pen');
+
+    // the same ellipse pinned to the canvas: just as anisotropic, and the
+    // fan stays where it is when the pen turns
+    const pinned = await measure(BS.makeBrush(facet), { seeds: 1 });
+    assert(
+      pinned.pose.anisotropy > 1.3,
+      `the pinned control measured only ${pinned.pose.anisotropy}x`,
+    );
+    assert(!pinned.pose.followsPen, 'a fixed tip angle should not follow the pen');
+  });
+
   await test('spacing over 100% leaves gaps a stroke cannot fill', async () => {
     const tight = await measure(BS.makeBrush({ tip: { size: 40, spacing: 0.1 } }), { seeds: 1 });
     const loose = await measure(BS.makeBrush({ tip: { size: 40, spacing: 2 } }), { seeds: 1 });
