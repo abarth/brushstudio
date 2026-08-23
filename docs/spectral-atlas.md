@@ -14,8 +14,37 @@ the axes are, what fractals specifically look like on it, and what each
 region actually paints. It is a working notebook, not a finished theory —
 entries get added as the space is swept.
 
-The tiles referenced throughout are `out/spectral-atlas.png`, regenerable
-with the procedure at the end.
+Sheets referenced throughout, all regenerable with the procedure in §5:
+`out/spectral-atlas{,-2,-3}.png` are the field tiles (groups A–G, H–J, K–O)
+and `out/spectral-atlas{,-2,-3}-strokes.png` the painted shortlists.
+
+## 0. Shortlist for promotion
+
+**The directional group is the strongest thing in this atlas and is where to
+start when these become brushes.** It was not on the map at all until
+`sectorDeg` existed, it produced the highest delivered contrast of anything
+measured, and it covers material ground the shipped collection cannot reach —
+ripple, weave, drapery, flow, grain. Reviewed and wanted:
+
+| candidate | spectrum | texture % | note |
+| --- | --- | --- | --- |
+| **flow** | ring k=10 + wedge 18° + warp | **17.6** | rigid train; the highest contrast measured anywhere here |
+| **whorl** | ring k=16 + wedge 12° + warp | **15.9** | rigid train; fingerprint eddies, holds along a stroke |
+| **grain** | β=2.6 + wedge 14° + warp | 12.3 | rigid train; wood grain, smoke curl |
+| **sand** | ring k=10 + wedge 18° | 10.4 | deep train; ripples with free dislocations |
+| **width dial** | ring k=12, wedge 5/12/30/55° | 10.4–10.5 | a family axis in its own right (§3, group M) |
+| **comb** | ring k=16 + wedge 12° | 10.0 | deep train; corduroy, drawn fibre |
+| **brushed** | coarse 20° + fine cross 25° | 9.5 | deep train; brushed panel |
+| **herringbone** | two wedges at ±40° | 8.5 | deep train; crosshatch, woven mesh |
+| **swell** | ring k=4 + wedge 30° | 7.7 | deep train; crossing wave trains |
+
+Behind it, the **ring** group (labyrinth k=8, reticulation k=16), the
+**ladder**, **tooth**, and the **lognormal cascade** as a mapping that
+applies across all of them.
+
+Two decisions are already made for whoever promotes these. The warped three
+ship on the **shallow rigid train**, not the deep one (§4). And the crest
+axis is a design choice per brush, not a default (§2).
 
 ## 1. What makes a spectrum *fractal*
 
@@ -141,6 +170,11 @@ audit's delivered-contrast measure.
 | **cascade σ=0.45** | lognormal, low σ | intermittent cloud with real contrast | good — the retune the sparse σ=1.2 version needed |
 | **ring + power-law floor** | ring k=10 over β=2.4 | cells lost in roughness | weak — the floor swamps the cellular band |
 | **ring k=2.5** | very low ring | big soft lobes | weak — coarser than the tip can carry |
+| **flow / whorl / grain** | wedge + domain warp | flow lines, fingerprint eddies, wood grain | **strong** — 17.6 / 15.9 / 12.3%, but phase textures: rigid train only (§4) |
+| **width dial** | ring k=12, wedge 5→55° | corrugation → ripple → broken crest → mild bias | **strong** — a legible family axis; 5° is graphic, 55° is barely directional |
+| **brushed** | coarse wedge 20° + fine cross wedge 25° | brushed panel, drag over drag | good — 9.5%; two directions at two scales |
+| **crest axis 90°** | the same wedges turned | grain running *along* the mark | good — softer than across (4.9% for comb) but the natural choice for a drag |
+| **runs** | wedge 16° + lognormal σ=0.6 | rain, drips, weathering streaks | fair — 4.9%; the idea works, wants more depth than 0.55 |
 | **stretchX 15** | strong single-axis squeeze | combed, dragged, brushed panel | conditional — canvas-fixed axis (§2) |
 | **crossed rings** | rings on both axes | weave, basket, plaid | conditional — legible but reads regular |
 | **cascade σ=1.2** | lognormal damage | intermittent, rare deep bites | needs work — too sparse at depth 0.55; wants higher depth or lower σ |
@@ -148,7 +182,28 @@ audit's delivered-contrast measure.
 | **1–2 octave gaps** | lacunar | grain over cloud | weak — the fine band dominates; the gap does not read |
 | **silt, crepe** | broad β=1.4; mid-band bump | even mottle; crumple | weak — close to cloud and agate |
 
-## 4. Procedure
+## 4. The phase boundary, measured
+
+A domain warp is the one way to give a spectral texture large-scale
+organisation — but the curves it makes are *phase*, so it moves the texture
+across the line this atlas is built on. That prediction is now tested rather
+than argued: the same warped tip, painted on both trains.
+
+| texture | deep train (scatter 0.7, n̄ 12) | rigid train (scatter 0.2, n̄ 3) |
+| --- | --- | --- |
+| whorl | 9.1% — the eddies blend into uniform hatching | **15.9%** — the eddies survive as eddies |
+| flow | 10.1% | **17.6%** |
+
+Three-quarters more delivered contrast on the rigid train, at equal or
+better ripple (1.9–2.1% against 2.2–2.7%). So warping is not a free
+decoration on a spectral texture: it *reclassifies* it. Add a warp and the
+brush moves trains.
+
+The converse is the useful half. An unwarped wedge is stationary and Gaussian
+like everything else in §1, so it keeps the deep train and the wild scatter;
+warp it and you trade that for structure the eye can follow.
+
+## 5. Procedure
 
 ```bash
 node tools/fractal-tip.mjs cand.spec.json --field 0.55    # ~1s: the damage
@@ -165,23 +220,23 @@ Exploration specs carry no `tonal.gain`, so the preview shows the design
 itself. Add `gain ≈ 3` and `floor 0.02` when promoting, so the deep train
 delivers that design rather than a flattened version of it (math doc §6).
 
-## 5. Open directions
+## 6. Open directions
 
-* **The crest axis, chosen deliberately.** Everything swept so far runs its
-  wavevector along x (crests across a horizontal stroke). The 90° variants —
-  grain running *along* the mark — are one number away and probably the more
-  useful half for a painter.
-* **Wedge × cascade, aimed properly.** Intermittent damage confined to one
-  direction is runs, drips and weathering streaks. The first attempt pointed
-  its axis the wrong way and made horizontal wisps (a good cirrus texture,
-  the wrong drip); `sectorAxisDeg: 0` with a narrow wedge is the version to
-  try.
-* **Wedge width as a family dial.** 12° / 18° / 30° / 55° is a legible
-  progression from graphic striation to a mild directional bias — a
-  three-level family in the same sense that depth is one.
-* **Curved and defected crests.** A wedge whose axis rotates slowly across
-  the field (or a domain warp applied after synthesis) would give flow lines
-  and fingerprint whorls rather than straight ripples.
 * **A family graded by inner scale.** `cut` at 8 / 20 / 60 c/dia is a real
-  progression — soft-focus to granular — and is orthogonal to the depth
-  dial every family currently uses.
+  progression — soft-focus to granular — and is orthogonal to the depth dial
+  every family currently uses. So is the wedge-width dial (§3, group M).
+* **Warp strength as a dial.** `warp.amp` from 0 to 0.09 runs straight
+  ripple → flow → whorl on one spectrum. Untested as a graded family, and it
+  crosses the phase boundary partway along, which makes the train choice
+  interesting rather than obvious.
+* **Runs and drips, deeper.** The wedge × cascade idea reads at depth 0.55
+  but wants 0.8; and a wedge whose cascade is anisotropic too (long in the
+  run direction) would give the tapering streak a real drip has.
+* **Rotating the wedge axis across the field**, rather than warping after
+  synthesis. Warping bends crests already laid down; a rotating axis would
+  keep them locally straight while the *direction* drifts — closer to
+  bedding, brushed curves, and hair.
+* **Two-material spectra.** Every entry here is one material. A spectrum
+  whose two components have different *tonal* treatments — one rank, one
+  lognormal — has not been tried and is the obvious way to get corrosion
+  sitting on a surface rather than replacing it.

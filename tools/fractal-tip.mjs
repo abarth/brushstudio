@@ -1174,7 +1174,43 @@ let baseField =
   : FIELD_KIND === 'domains' ? domainsField(spec.field)
   : FIELD_KIND === 'warped' ? warpedField(spec.field)
   : synthField(buildAmp(null));
+/**
+ * Domain warp over any finished field: displace each sample by a smooth
+ * low-frequency vector field. Straight crests bend into flow lines, whorls
+ * and grain running round a knot — the one way to give a spectral texture
+ * large-scale organisation, since a stationary spectrum has none by
+ * construction.
+ *
+ * Note what this costs. A warped field is no longer stationary Gaussian:
+ * the curves are PHASE, and a deep mask train averages independent windows,
+ * so they blend away (math doc §6). A warped spectrum therefore belongs on
+ * the shallow rigid train with the generator textures, not on the deep
+ * scattered one — the warp moves a texture across the atlas's central line.
+ */
+function warpField(field, amp, kMax) {
+  const warpAmp = new Float64Array(N * N);
+  for (let y = 0; y < N; y++) {
+    const fy = binFreq(y, N);
+    for (let x = 0; x < N; x++) {
+      const k = Math.hypot(binFreq(x, N), fy) * N;
+      if (k > 0 && k <= kMax) warpAmp[y * N + x] = 1 / (1 + k * k);
+    }
+  }
+  const wx = synthField(warpAmp, makePhases(spec.seed + 901));
+  const wy = synthField(warpAmp, makePhases(spec.seed + 907));
+  const out = new Float64Array(N * N);
+  const a = amp * N;
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const i = y * N + x;
+      out[i] = sampleWrapped(field, x + a * wx[i], y + a * wy[i]);
+    }
+  }
+  return out;
+}
+
 if (spec.highpassK) baseField = highpassField(baseField, spec.highpassK);
+if (spec.warp) baseField = warpField(baseField, spec.warp.amp ?? 0.05, spec.warp.k ?? 3);
 
 if (spec.output === 'pattern') {
   // A texture-channel pattern: tileable by FFT construction, no vignette,
