@@ -120,11 +120,22 @@ it along the barrel and the mark is one lead wide; push it sideways and the
 mark is the whole worn face. The engine can do that, and it is two settings:
 
 * `shape.angleControl` on `tilt`, which turns the tip to the **azimuth** —
-  the compass direction the pen leans — so the tip's long axis lies along the
-  barrel's shadow on the page, where a worn facet's long axis actually is.
+  the compass direction the pen leans.
 * `tip.roundness` under 1, to give the ellipse something to be narrow about.
+* `tip.angle` at **90**, because of the quarter turn below.
 
-Three things about it are worth knowing before reaching for it.
+Four things about it are worth knowing before reaching for it.
+
+**Pen Tilt on an angle carries a quarter turn.** Photoshop lays the tip's long
+axis *across* the lean, not along it — which is what a flat nib does, since
+tilting foreshortens the disc along the lean and leaves it broadest across.
+A worn pencil facet is the other way round: its long axis lies along the
+barrel's shadow on the page. So a facet brush wants `tip.angle: 90` to put it
+back, and a nib brush wants 0. Verified against Photoshop — a tilt-bound tip
+at angle 0 imports 90° out from what this engine used to draw, and the engine
+now carries the quarter turn so the two agree. (The *sign* of the quarter turn
+is not pinned: an ellipse at +90 and −90 is the same ellipse. It will matter
+for a sampled tip that is not symmetric about its long axis.)
 
 **Direction is not a substitute.** `direction` turns the tip to follow the
 path, so the mark comes out the *same* width through every heading — the

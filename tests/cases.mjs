@@ -118,23 +118,34 @@ export async function runCases(BS, backend = 'cpu') {
     // a wide one across it. What Pen Tilt on the angle adds is whose axis it
     // is: the pen's, not the canvas's — so the same fan of headings has to
     // come out the same when the barrel moves.
+    //
+    // Which way round it lands is Photoshop's convention and is pinned here
+    // in both directions, because it is not the obvious one: a bare tilt
+    // binding puts the long axis ACROSS the lean, and a tip meant to lie
+    // along the barrel needs 90 in tip.angle to get there.
     const facet = { tip: { size: 24, roundness: 0.5, spacing: 0.05 } };
-    const bound = await measure(
-      BS.makeBrush({
-        ...facet,
-        shape: { enabled: true, angleControl: { source: 'tilt', fadeSteps: 25 } },
-      }),
+    const tilt = { enabled: true, angleControl: { source: 'tilt', fadeSteps: 25 } };
+
+    const across = await measure(BS.makeBrush({ ...facet, shape: tilt }), { seeds: 1 });
+    assert(
+      across.pose.anisotropy > 1.3,
+      `a half-round facet measured only ${across.pose.anisotropy}x wide-to-narrow`,
+    );
+    assert(across.pose.followsPen, 'a tilt-bound facet did not follow the pen');
+    assert(
+      across.pose.narrowestDeg === 90,
+      `angle 0 should lay the facet across the lean, narrow at 90°, not ${across.pose.narrowestDeg}°`,
+    );
+
+    const along = await measure(
+      BS.makeBrush({ tip: { ...facet.tip, angle: 90 }, shape: tilt }),
       { seeds: 1 },
     );
+    assert(along.pose.followsPen, 'the turned facet did not follow the pen');
     assert(
-      bound.pose.anisotropy > 1.3,
-      `a half-round facet measured only ${bound.pose.anisotropy}x wide-to-narrow`,
+      along.pose.narrowestDeg === 0,
+      `angle 90 should lay the facet along the barrel, narrow at 0°, not ${along.pose.narrowestDeg}°`,
     );
-    assert(
-      bound.pose.narrowestDeg === 0,
-      `the narrow mark should run along the barrel, not at ${bound.pose.narrowestDeg}°`,
-    );
-    assert(bound.pose.followsPen, 'a tilt-bound facet did not follow the pen');
 
     // the same ellipse pinned to the canvas: just as anisotropic, and the
     // fan stays where it is when the pen turns
