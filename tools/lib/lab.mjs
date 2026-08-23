@@ -90,7 +90,7 @@ export function specFromParams(p = {}) {
       gain: num(p.gain, GAIN[train]),
       floor: 0.02,
     },
-    scatterDeconv: train === 'deep',
+    scatterDeconv: p.scatterDeconv ?? train === 'deep',
   };
 }
 
@@ -125,9 +125,9 @@ export function brushFromSpec(spec, level, train) {
   };
 }
 
-function runTip(specPath) {
+function runTip(specPath, extra = []) {
   return new Promise((ok, bad) => {
-    const child = spawn(process.execPath, [join(ROOT, 'tools/fractal-tip.mjs'), specPath], {
+    const child = spawn(process.execPath, [join(ROOT, 'tools/fractal-tip.mjs'), specPath, ...extra], {
       cwd: ROOT,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -143,17 +143,37 @@ function runTip(specPath) {
 
 const pct = (level) => Math.round(level.coverage * 100);
 
-/** Synthesize one tip for these parameters; returns the PNG bytes. */
+async function synthOne(params, name, extra = []) {
+  const spec = specFromParams({ ...params, name, native: params.native ?? 512 });
+  const specPath = join(TMP, `${name}.spec.json`);
+  writeFileSync(specPath, JSON.stringify(spec, null, 1));
+  await runTip(specPath, extra);
+  return { spec, png: readFileSync(join(TMP, `${name}-${pct(spec.levels[0])}.png`)) };
+}
+
+/**
+ * Synthesize for these parameters, with everything the lab shows alongside
+ * the tip: the spectrum diagram, the radial curves behind it, and — when
+ * the train is one we deconvolve for — the same texture synthesized WITHOUT
+ * the 1/H correction, so the two can be put side by side.
+ */
 export async function preview(params) {
   mkdirSync(TMP, { recursive: true });
-  const spec = specFromParams({ ...params, name: 'preview', native: params.native ?? 512 });
-  const specPath = join(TMP, 'preview.spec.json');
-  writeFileSync(specPath, JSON.stringify(spec, null, 1));
-  await runTip(specPath);
-  const png = readFileSync(join(TMP, `preview-${pct(spec.levels[0])}.png`));
-  // the caller shows this JSON, so hand back the spec as it will be SAVED —
-  // full size and all three depths — not the cut-down preview one
-  return { png, spec: specFromParams({ ...params, native: 1024, levels: LEVELS }) };
+  const { spec, png } = await synthOne(params, 'preview', ['--diagram']);
+  const diagram = readFileSync(join(TMP, 'preview.diagram.png'));
+  const radial = JSON.parse(readFileSync(join(TMP, 'preview.diagram.json'), 'utf8'));
+  const raw = spec.scatterDeconv
+    ? (await synthOne({ ...params, scatterDeconv: false }, 'preview-raw')).png
+    : null;
+  return {
+    png,
+    raw,
+    diagram,
+    radial,
+    // the caller shows this JSON, so hand back the spec as it will be SAVED —
+    // full size and all three depths — not the cut-down preview one
+    spec: specFromParams({ ...params, native: 1024, levels: LEVELS }),
+  };
 }
 
 const LEVELS = [
@@ -220,9 +240,17 @@ export function spectrumLab() {
         if (req.method !== 'POST') return next();
         void (async () => {
           try {
-            const { png, spec } = await preview(await body(req));
+            const out = await preview(await body(req));
             res.setHeader('content-type', 'application/json');
-            res.end(JSON.stringify({ png: png.toString('base64'), spec }));
+            res.end(
+              JSON.stringify({
+                png: out.png.toString('base64'),
+                raw: out.raw ? out.raw.toString('base64') : null,
+                diagram: out.diagram.toString('base64'),
+                radial: out.radial,
+                spec: out.spec,
+              }),
+            );
           } catch (e) {
             res.statusCode = 400;
             res.end(JSON.stringify({ error: String(e.message ?? e) }));

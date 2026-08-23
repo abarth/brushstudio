@@ -886,28 +886,34 @@ $<HTMLDetailsElement>('library').addEventListener('toggle', function () {
   if (this.open) search.focus();
 });
 
-// One popover open at a time, and a click anywhere else shuts it — except
-// the spectrum lab, which is a place you work rather than a menu you pick
-// from: its loop is tweak, synthesize, paint, tweak, and every step of that
-// would dismiss it.
+// one popover open at a time, and a click anywhere else shuts it
 const pops = [...document.querySelectorAll<HTMLDetailsElement>('details.pop')];
-const sticky = (pop: HTMLDetailsElement) => pop.id === 'lab';
 document.addEventListener('pointerdown', (e) => {
-  for (const pop of pops) {
-    if (pop.open && !sticky(pop) && !pop.contains(e.target as Node)) pop.open = false;
-  }
+  for (const pop of pops) if (pop.open && !pop.contains(e.target as Node)) pop.open = false;
 });
 for (const pop of pops) {
-  if (sticky(pop)) continue;
   pop.addEventListener('click', (e) => {
     // a command is a one-shot; the toggles are worth staying open for
     if ((e.target as HTMLElement).tagName === 'BUTTON') pop.open = false;
   });
 }
-// opening the lab closes the library, so the two never stack
-$<HTMLDetailsElement>('lab').addEventListener('toggle', function () {
-  if (this.open) $<HTMLDetailsElement>('library').open = false;
-});
+
+/**
+ * The panel has two modes, because the spectrum lab is a place you work
+ * rather than a menu you pick from — its loop is tweak, synthesize, paint,
+ * tweak, and it needs the room and the persistence that a popover cannot
+ * give it. The brush stays live across the switch: whatever the lab last
+ * synthesized is still what the canvas paints with, so flipping back to
+ * `brush` is how you inspect and adjust a lab tip's engine settings.
+ */
+function setMode(mode: 'brush' | 'lab'): void {
+  document.querySelector('aside')!.dataset.mode = mode;
+  $('mode-brush').classList.toggle('on', mode === 'brush');
+  $('mode-lab').classList.toggle('on', mode === 'lab');
+}
+$('mode-brush').addEventListener('click', () => setMode('brush'));
+$('mode-lab').addEventListener('click', () => setMode('lab'));
+setMode('brush');
 
 $('controls').addEventListener('pointerleave', () => setHint(''));
 $('clear').addEventListener('click', clear);

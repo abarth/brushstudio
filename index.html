@@ -43,13 +43,14 @@
             <ul id="brushes"></ul>
           </div>
         </details>
-        <details id="lab" class="pop">
-          <summary>spectrum lab</summary>
-          <div class="sheet"></div>
-        </details>
+        <div id="modes" role="tablist">
+          <button id="mode-brush" class="on" role="tab" title="the engine's settings for this brush">brush</button>
+          <button id="mode-lab" role="tab" title="design a texture as a power spectrum, and paint with it">spectrum</button>
+        </div>
         <nav id="rail"></nav>
         <div id="controls"></div>
         <pre id="patch" hidden></pre>
+        <section id="labpanel"></section>
         <footer id="bar">
           <p id="hint"></p>
           <div class="acts">

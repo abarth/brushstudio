@@ -254,7 +254,8 @@ Exploration specs carry no `tonal.gain`, so the preview shows the design
 itself. Add `gain ≈ 3` and `floor 0.02` when promoting, so the deep train
 delivers that design rather than a flattened version of it (math doc §6).
 
-**Or sweep it by hand.** `npm run dev` carries a **spectrum lab**: the same
+**Or sweep it by hand.** `npm run dev` has two panel modes, and the second
+is a **spectrum lab**: the same
 parameters as a popover, synthesizing a tip you can immediately paint with,
 with `copy spec` for the JSON and `keep` to write `tips/<name>.spec.json`,
 all three depths, and the brush documents straight into the repo — the new
@@ -264,6 +265,29 @@ dev-server endpoint (`tools/lib/lab.mjs`), at 512px rather than 1024 so it
 comes back in about a second. A browser reimplementation would drift from
 the tool that made the shipped tips, and a lab that misrepresents what a
 spec paints is worse than no lab.
+
+Beside the tip it shows what the synthesis filter is doing —
+`fractal-tip --diagram` writes this for any spec, so it is available from
+the CLI too:
+
+* **three centred log-power maps**: the target `S★`, the train's transfer
+  `H = 1 − Λ(2π|f|S)²`, and the `S★/H` that actually gets synthesized. `H`
+  is drawn at ±8 c/dia and the other two at ±40, because the two live a
+  decade apart and one shared frame renders `H` as a flat white square.
+* **the radial view**, where the interaction is legible: `S★` and `S★/H` on
+  log-log axes with `H` behind them on a linear 0–1 scale, and the two
+  frequencies the train puts on the axis — `2/scatter`, below which the
+  scatter cloud averages structure away, and `1/spacing`, where its comb
+  sits.
+* **both tips**, deconvolved and not, whenever the train is one we correct
+  for.
+
+The last of those is worth looking at once, because it makes a claim from
+§3 concrete: at the deep train's scatter 0.7, `H` is already 0.98 by
+k = 3 and 1.00 by k = 10, so `1/H` is doing *nothing* to a texture band
+that starts at k = 10. The deconvolution earns its place on tight-train
+brushes with coarse content; on a wide-scatter ring it is a formality, and
+the two tips are indistinguishable.
 
 ## 6. The next group
 

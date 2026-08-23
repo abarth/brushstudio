@@ -37,6 +37,14 @@ export interface LabParams {
   seed: number;
 }
 
+interface RadialDump {
+  kShow: number[];
+  deconvolved: boolean;
+  combCyclesPerDia: number | null;
+  scatterCyclesPerDia: number | null;
+  radial: { k: number; target: number; transfer: number; deconv: number }[];
+}
+
 export interface LabHooks {
   /** install a synthesized tip as the live brush and repaint the panel */
   apply: (pngBase64: string, label: string, train: 'deep' | 'rigid') => Promise<void>;
@@ -102,10 +110,13 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '') => {
 
 export function initLab(hooks: LabHooks): void {
   const params: LabParams = { ...DEFAULTS };
-  const panel = document.getElementById('lab');
-  if (!panel) return;
-  const sheet = panel.querySelector('.sheet') as HTMLElement;
+  const sheet = document.getElementById('labpanel');
+  if (!sheet) return;
+  const panelWidth = () => sheet.clientWidth - 24;
   const fields: { row: Row; wrap: HTMLElement; field: Field }[] = [];
+  const selects: { node: HTMLSelectElement; get: () => string }[] = [];
+  /** the preset the current values came from, cleared as soon as one moves */
+  let from = '—';
   let lastSpec: unknown = null;
   let busy = false;
   let queued = false;
@@ -138,6 +149,7 @@ export function initLab(hooks: LabHooks): void {
     });
     wrap.append(name, sel);
     sheet.append(wrap);
+    selects.push({ node: sel, get: get as () => string });
     return sel;
   };
 
@@ -150,14 +162,16 @@ export function initLab(hooks: LabHooks): void {
       const preset = PRESETS[v];
       if (!preset) return;
       Object.assign(params, DEFAULTS, preset);
+      from = v;
     },
   );
+  const edited = () => (from = '—');
   choice('spectrum', 'a narrow ring is one scale; a power law is all of them', ['ring', 'law'] as const,
-    () => params.kind, (v) => (params.kind = v));
+    () => params.kind, (v) => ((params.kind = v), edited()));
   choice('mapping', 'rank-uniform, or the lognormal cascade this mask accumulates toward', ['modulate', 'lognormal'] as const,
-    () => params.mode, (v) => (params.mode = v));
+    () => params.mode, (v) => ((params.mode = v), edited()));
   choice('train', 'deep is scatter 0.7 at n=12; rigid is 0.2 at n=3 and is where warped textures belong',
-    ['deep', 'rigid'] as const, () => params.train, (v) => (params.train = v));
+    ['deep', 'rigid'] as const, () => params.train, (v) => ((params.train = v), edited()));
 
   // --- the numeric rows -----------------------------------------------------
   for (const row of ROWS) {
@@ -171,7 +185,10 @@ export function initLab(hooks: LabHooks): void {
       step: row.step,
       pct: row.pct,
       get: () => params[row.field] as number,
-      set: (v) => ((params[row.field] as number) = v),
+      set: (v) => {
+        (params[row.field] as number) = v;
+        from = '—';
+      },
       commit: () => {
         refresh();
         schedule();
@@ -200,12 +217,138 @@ export function initLab(hooks: LabHooks): void {
   acts.append(shoot, copy, nameBox, keep);
   sheet.append(acts);
 
+  // --- what the synthesis is doing ------------------------------------------
+  const tips = el('div', 'labpair');
+  const shotWrap = el('figure', 'labfig');
   const preview = el('img', 'labshot');
   preview.alt = 'the synthesized tip';
-  sheet.append(preview);
+  const shotCap = el('figcaption');
+  shotCap.textContent = 'tip';
+  shotWrap.append(preview, shotCap);
+  const rawWrap = el('figure', 'labfig');
+  const rawShot = el('img', 'labshot');
+  rawShot.alt = 'the same texture with no 1/H correction';
+  const rawCap = el('figcaption');
+  rawCap.textContent = 'no 1/H';
+  rawWrap.append(rawShot, rawCap);
+  tips.append(shotWrap, rawWrap);
+  sheet.append(tips);
 
+  const diagHead = el('p', 'labhead');
+  diagHead.textContent = 'the 2-D spectrum, and what the train does to it';
+  diagHead.title =
+    'centred log-power maps: the target S★ you designed, the train\u2019s transfer H = 1 − Λ(2πfS)², and the S★/H actually synthesized';
+  const diagram = el('img', 'labdiag');
+  diagram.alt = 'target spectrum, train transfer, and the deconvolved spectrum';
+  const diagCaps = el('div', 'labcaps');
+  sheet.append(diagHead, diagram, diagCaps);
+
+  const plot = el('canvas', 'labplot');
+  sheet.append(plot);
+  const plotNote = el('p', 'labnote');
+  sheet.append(plotNote);
+
+  /**
+   * The radial view, which is where the interaction is legible: the target
+   * and the deconvolved curve on log-log axes, the transfer H behind them on
+   * a linear 0..1 scale, and the two frequencies the train puts on the axis
+   * — where its scatter cloud stops averaging, and where its comb sits.
+   */
+  function drawPlot(d: RadialDump): void {
+    const ctx = plot.getContext('2d');
+    if (!ctx) return;
+    // draw in CSS pixels at the device's real resolution, so the labels are
+    // crisp rather than a stretched 560px backing store
+    const dpr = window.devicePixelRatio || 1;
+    const W = Math.max(220, Math.floor(plot.clientWidth || panelWidth()));
+    const H = 200;
+    plot.width = Math.round(W * dpr);
+    plot.height = Math.round(H * dpr);
+    plot.style.height = `${H}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const css = getComputedStyle(document.body);
+    const fg = css.getPropertyValue('--fg') || '#eee';
+    const faint = css.getPropertyValue('--faint') || '#888';
+    const L = 20;
+    const R = 8;
+    const T = 12;
+    const B = 20;
+    ctx.clearRect(0, 0, W, H);
+    const pts = d.radial.filter((r) => r.target > 0);
+    if (!pts.length) return;
+    const kLo = 0.5;
+    const kHi = 80;
+    const powers = pts.flatMap((r) => [r.target, r.deconv]).filter((v) => v > 0);
+    const pHi = Math.log10(Math.max(...powers));
+    const pLo = Math.max(Math.log10(Math.min(...powers)), pHi - 5);
+    const X = (k: number) => L + ((Math.log10(k) - Math.log10(kLo)) / (Math.log10(kHi) - Math.log10(kLo))) * (W - L - R);
+    const Y = (v: number) => T + (1 - (Math.log10(Math.max(v, 1e-30)) - pLo) / (pHi - pLo)) * (H - T - B);
+    const Yh = (v: number) => T + (1 - v) * (H - T - B);
+
+    ctx.strokeStyle = faint;
+    ctx.fillStyle = faint;
+    ctx.globalAlpha = 0.45;
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.lineWidth = 1;
+    for (const k of [1, 2, 5, 10, 20, 50]) {
+      ctx.beginPath();
+      ctx.moveTo(X(k), T);
+      ctx.lineTo(X(k), H - B);
+      ctx.stroke();
+      ctx.fillText(String(k), X(k) - 4, H - 8);
+    }
+    ctx.fillText('c/dia', W - 36, H - 8);
+    ctx.globalAlpha = 1;
+
+    // H, on its own linear 0..1 scale — it is a fraction, not a power
+    ctx.strokeStyle = '#6ba3d6';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    pts.forEach((r, i) => (i ? ctx.lineTo(X(r.k), Yh(r.transfer)) : ctx.moveTo(X(r.k), Yh(r.transfer))));
+    ctx.stroke();
+
+    const curve = (key: 'target' | 'deconv', colour: string, dash: number[]) => {
+      ctx.strokeStyle = colour;
+      ctx.lineWidth = 1.8;
+      ctx.setLineDash(dash);
+      ctx.beginPath();
+      pts.forEach((r, i) => (i ? ctx.lineTo(X(r.k), Y(r[key])) : ctx.moveTo(X(r.k), Y(r[key]))));
+      ctx.stroke();
+      ctx.setLineDash([]);
+    };
+    curve('target', '#d8b070', []);
+    if (d.deconvolved) curve('deconv', '#e07a5f', [4, 3]);
+
+    const mark = (k: number | null, label: string, colour: string) => {
+      if (!k || k < kLo || k > kHi) return;
+      ctx.strokeStyle = colour;
+      ctx.globalAlpha = 0.8;
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath();
+      ctx.moveTo(X(k), T);
+      ctx.lineTo(X(k), H - B);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = colour;
+      ctx.fillText(label, X(k) + 3, T + 10);
+      ctx.globalAlpha = 1;
+    };
+    mark(d.scatterCyclesPerDia, 'scatter', '#6ba3d6');
+    mark(d.combCyclesPerDia, 'comb', '#9a86c4');
+
+    ctx.fillStyle = fg;
+    ctx.fillText('S★', 6, T + 10);
+    ctx.fillText('H', 6, H - B - 4);
+  }
+
+  /**
+   * Pull every control back from `params`. A preset rewrites the whole set,
+   * so the selects have to re-read too — showing `train: deep` while the
+   * synthesis ran `rigid` is the panel lying about what it just painted.
+   */
   function refresh(): void {
-    presetSel.value = '—';
+    presetSel.value = from;
+    for (const { node, get } of selects) if (node !== presetSel) node.value = get();
     for (const { row, wrap } of fields) wrap.hidden = row.when ? !row.when(params) : false;
     for (const { field } of fields) field.sync();
   }
@@ -229,10 +372,39 @@ export function initLab(hooks: LabHooks): void {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ ...params, native: 512 }),
       });
-      const out = (await res.json()) as { png?: string; spec?: unknown; error?: string };
+      const out = (await res.json()) as {
+        png?: string;
+        raw?: string | null;
+        diagram?: string;
+        radial?: RadialDump;
+        spec?: unknown;
+        error?: string;
+      };
       if (!res.ok || out.error) throw new Error(out.error ?? `HTTP ${res.status}`);
       lastSpec = out.spec;
       preview.src = `data:image/png;base64,${out.png}`;
+      rawWrap.hidden = !out.raw;
+      if (out.raw) rawShot.src = `data:image/png;base64,${out.raw}`;
+      if (out.diagram) diagram.src = `data:image/png;base64,${out.diagram}`;
+      if (out.radial) {
+        const z = out.radial.kShow ?? [40, 8, 40];
+        diagCaps.textContent = '';
+        ['S★', 'H', 'S★/H'].forEach((t, i) => {
+          const cap = el('span');
+          cap.textContent = `${t} ±${z[i]}`;
+          diagCaps.append(cap);
+        });
+      }
+      if (out.radial) {
+        drawPlot(out.radial);
+        const d = out.radial;
+        // 1/H at the spectrum's own scale is the number that says whether the
+        // correction is doing anything: at wide scatter it is ~1 in band
+        const inBand = d.radial.find((r) => r.k >= (params.kind === 'ring' ? params.k : 6)) ?? d.radial[0];
+        plotNote.textContent = d.deconvolved
+          ? `1/H is ${(1 / inBand.transfer).toFixed(2)}× at k=${inBand.k.toFixed(1)} — the train averages coarse structure away below ~${d.scatterCyclesPerDia?.toFixed(1)} c/dia, and its comb sits at ${d.combCyclesPerDia} c/dia`
+          : `no 1/H on this train: a rigid train barely smears, so dividing by H would only lift the coarse band the splotches live in. Its comb sits at ${d.combCyclesPerDia} c/dia`;
+      }
       await hooks.apply(out.png!, `lab · ${params.kind} ${params.wedge > 0 ? `wedge ${params.wedge}°` : 'isotropic'}`, params.train);
     } catch (e) {
       hooks.status(`spectrum lab: ${(e as Error).message}`, 6000);

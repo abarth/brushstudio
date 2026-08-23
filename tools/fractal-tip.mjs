@@ -163,7 +163,19 @@ const lambda = makeLambda();
  */
 const SCATTER_DECONV = spec.scatterDeconv ?? spec.maskMode !== 'tonal';
 const S_TIP = SCATTER_DECONV && spec.train?.dual ? spec.train.dual.scatter * (N / 2) : 0;
-/** Scatter transfer H(f) = 1 − Λ(2πfS)² — the kernel we deconvolve by. */
+/**
+ * The train's transfer H(f) = 1 − Λ(2πfS)², as the kernel actually behaves
+ * — computed from the dual scatter whether or not we deconvolve by it, so
+ * a diagram can show what the train does to a spectrum nobody corrected.
+ */
+function scatterTransferRaw(fPerPx) {
+  const S = spec.train?.dual ? spec.train.dual.scatter * (N / 2) : 0;
+  if (!S) return 1;
+  const L = lambda(2 * Math.PI * fPerPx * S);
+  return Math.max(1e-4, 1 - L * L);
+}
+
+/** The same, as the synthesis filter uses it: 1 when deconvolution is off. */
 function scatterTransfer(fPerPx) {
   if (!S_TIP) return 1;
   const L = lambda(2 * Math.PI * fPerPx * S_TIP);
@@ -1212,6 +1224,98 @@ function warpField(field, amp, kMax) {
 
 if (spec.highpassK) baseField = highpassField(baseField, spec.highpassK);
 if (spec.warp) baseField = warpField(baseField, spec.warp.amp ?? 0.05, spec.warp.k ?? 3);
+
+/**
+ * --diagram: write what the synthesis filter is actually doing, as three
+ * centred log-power panels (target S★, the train's transfer H, and the
+ * deconvolved S★/H that gets synthesized) plus the radial curves behind
+ * them. The spectrum lab draws its plot from the JSON; the panels are the
+ * anisotropy story a radial average cannot tell — a wedge is two lobes, a
+ * ring is an annulus, and H is the isotropic hole they sit in.
+ */
+function writeDiagram() {
+  const P = 160;
+  // Per-panel zoom, because the two things being compared live a decade
+  // apart: the texture band runs out to tens of cycles per diameter, while
+  // H does all of its rising below ~5. One shared frame renders H as a flat
+  // white square, which is true and useless.
+  const K_SHOW = [40, 8, 40];
+  const panels = [];
+  const grab = (fn, kShow) => {
+    const v = new Float64Array(P * P);
+    for (let y = 0; y < P; y++) {
+      const ky = ((y + 0.5) / P - 0.5) * 2 * kShow;
+      for (let x = 0; x < P; x++) {
+        const kx = ((x + 0.5) / P - 0.5) * 2 * kShow;
+        v[y * P + x] = fn(kx / N, ky / N);
+      }
+    }
+    return v;
+  };
+  const target = grab((fx, fy) => targetPowerAt(fx, fy), K_SHOW[0]);
+  const transfer = grab((fx, fy) => scatterTransferRaw(Math.hypot(fx, fy)), K_SHOW[1]);
+  const deconv = grab(
+    (fx, fy) => targetPowerAt(fx, fy) / Math.max(scatterTransfer(Math.hypot(fx, fy)), 1e-12),
+    K_SHOW[2],
+  );
+  const logNorm = (v) => {
+    let lo = Infinity;
+    let hi = -Infinity;
+    const out = new Float64Array(v.length);
+    for (let i = 0; i < v.length; i++) {
+      out[i] = Math.log10(v[i] + 1e-14);
+      if (v[i] > 0) {
+        lo = Math.min(lo, out[i]);
+        hi = Math.max(hi, out[i]);
+      }
+    }
+    lo = Math.max(lo, hi - 6); // six decades is all the eye can use
+    return out.map((x) => clamp((x - lo) / (hi - lo || 1), 0, 1));
+  };
+  panels.push(logNorm(target), transfer, logNorm(deconv));
+  const strip = new Uint8Array(P * 3 * P);
+  panels.forEach((pan, i) => {
+    for (let y = 0; y < P; y++) {
+      for (let x = 0; x < P; x++) strip[y * (P * 3) + i * P + x] = Math.round(pan[y * P + x] * 255);
+    }
+  });
+  writeFileSync(join(outDir, `${spec.name}.diagram.png`), encodeGrayPng(strip, P * 3, P));
+
+  // radial curves: angular mean of the target, so a wedge reads as the
+  // fraction of the annulus it keeps rather than as its peak
+  const radial = [];
+  for (let i = 0; i <= 96; i++) {
+    const k = 0.4 * Math.pow(120 / 0.4, i / 96);
+    let acc = 0;
+    const STEPS = 96;
+    for (let a = 0; a < STEPS; a++) {
+      const th = (Math.PI * (a + 0.5)) / STEPS;
+      acc += targetPowerAt((k * Math.cos(th)) / N, (k * Math.sin(th)) / N);
+    }
+    const t = acc / STEPS;
+    const h = scatterTransferRaw(k / N);
+    radial.push({ k: +k.toFixed(3), target: t, transfer: h, deconv: t / Math.max(scatterTransfer(k / N), 1e-12) });
+  }
+  const dual = spec.train?.dual;
+  writeFileSync(
+    join(outDir, `${spec.name}.diagram.json`),
+    JSON.stringify(
+      {
+        kShow: K_SHOW,
+        deconvolved: SCATTER_DECONV && !!dual,
+        // the train's comb sits at 1/spacing cycles per mask diameter, the
+        // same units as k here; the scatter cloud's own scale is 2/scatter
+        combCyclesPerDia: dual ? +(1 / dual.spacing).toFixed(2) : null,
+        scatterCyclesPerDia: dual?.scatter ? +(2 / dual.scatter).toFixed(2) : null,
+        radial,
+      },
+      null,
+      1,
+    ),
+  );
+}
+
+if (argv.includes('--diagram')) writeDiagram();
 
 if (spec.output === 'pattern') {
   // A texture-channel pattern: tileable by FFT construction, no vignette,
