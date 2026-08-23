@@ -134,24 +134,42 @@ function scatterTransfer(fPerPx) {
 }
 
 /**
+ * Target power at a signed 2-D frequency.
+ *
+ * `stretchX > 1` squeezes the passband in fx, elongating that band's
+ * structure along x: the anisotropy of brushed metal, drag marks, striated
+ * stone. It reads per component before falling back to the spectrum-wide
+ * value, which is what lets one field carry coarse strata stretched flat
+ * under isotropic fine grain — anisotropy that changes with scale, the way
+ * a real bedded or grained material's does.
+ */
+function targetPowerAt(fx, fy) {
+  let s = 0;
+  for (const b of COMPONENTS) {
+    const stretch = b.stretchX ?? sp.stretchX ?? 1;
+    const k = Math.hypot(fx * stretch, fy) * N;
+    s += (b.weight ?? 1) * b.norm * bandPower(b, k);
+  }
+  return s;
+}
+
+/**
  * Amplitude filter over the FFT grid: √(S★/H), times an optional measured
  * correction curve (log-k → gain) from the post-threshold audit.
  */
 function buildAmp(correction) {
   const amp = new Float64Array(N * N);
-  // stretchX > 1 squeezes the passband in fx, elongating structure along x:
-  // the anisotropy of brushed metal, drag marks, striated stone. The tip
-  // rotates at paint time (or the pattern is laid once), so one axis serves.
-  const stretch = sp.stretchX ?? 1;
   for (let y = 0; y < N; y++) {
     const fy = binFreq(y, N);
     for (let x = 0; x < N; x++) {
-      const f = Math.hypot(binFreq(x, N) * stretch, fy);
-      const k = f * N;
-      const p = targetPower(k);
+      const fx = binFreq(x, N);
+      const p = targetPowerAt(fx, fy);
       if (p <= 0) continue;
+      // H is the scatter kernel's own transfer and the kernel is isotropic,
+      // so it takes the true radial frequency, never a stretched one
+      const f = Math.hypot(fx, fy);
       let a = Math.sqrt(p / scatterTransfer(f));
-      if (correction) a *= correction(k);
+      if (correction) a *= correction(f * N);
       amp[y * N + x] = a;
     }
   }

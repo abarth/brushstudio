@@ -571,7 +571,11 @@ Two readings need interpretation before they are believed:
   floor collapses and they explode over structure no viewer can see —
   a 20× spike that measures 0.4% of tone in the stroke, below one 8-bit
   gray step. For tonal families, believe the absolute stroke-domain
-  numbers (`ripple %`, `comb p-p %`) over the floor-relative ones.
+  numbers (`ripple %`, `comb p-p %`, `texture %`) over the floor-relative
+  ones. The patch *image* misleads the same way and for a second reason:
+  the fill's overlapping rows multiply on a graded mask, so a tonal patch
+  bands along its rows however well the brush behaves. Judge a tonal
+  texture on the stroke crop, not the patch.
 
 ## 8. Design procedure for a coverage family
 
