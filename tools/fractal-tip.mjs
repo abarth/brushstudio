@@ -138,7 +138,8 @@ function scatterTransfer(fPerPx) {
  *
  * `stretchX > 1` squeezes the passband in fx, elongating that band's
  * structure along x: the anisotropy of brushed metal, drag marks, striated
- * stone. It reads per component before falling back to the spectrum-wide
+ * stone. `stretchY` is the same on the other axis, so two components
+ * stretched on opposite axes cross into a weave. It reads per component before falling back to the spectrum-wide
  * value, which is what lets one field carry coarse strata stretched flat
  * under isotropic fine grain — anisotropy that changes with scale, the way
  * a real bedded or grained material's does.
@@ -146,8 +147,9 @@ function scatterTransfer(fPerPx) {
 function targetPowerAt(fx, fy) {
   let s = 0;
   for (const b of COMPONENTS) {
-    const stretch = b.stretchX ?? sp.stretchX ?? 1;
-    const k = Math.hypot(fx * stretch, fy) * N;
+    const sx = b.stretchX ?? sp.stretchX ?? 1;
+    const sy = b.stretchY ?? sp.stretchY ?? 1;
+    const k = Math.hypot(fx * sx, fy * sy) * N;
     s += (b.weight ?? 1) * b.norm * bandPower(b, k);
   }
   return s;
@@ -850,11 +852,15 @@ const vignette = (() => {
  * punches a full-ink speck through the whole stack: `floor` bounds ln d
  * from below and the specks go away. Both default to inert.
  */
-function tonalTip(field, sorted, depth) {
+/**
+ * The damage map the tonal mask is designed to carve: 0 = intact material,
+ * 1 = fully carved. Shared by the tip synthesis and the `--field` preview,
+ * so what the atlas shows and what the brush paints are the same function.
+ */
+function damageMap(field, sorted) {
   const t = spec.tonal ?? {};
-  const nBar = 0.8 / ((spec.train.dual.spacing ?? 0.33) * 0.95);
-  const data = new Uint8Array(N * N);
-  const delta = (t.mode ?? 'modulate') === 'delta';
+  const mode = t.mode ?? 'modulate';
+  const delta = mode === 'delta';
   const lo = delta ? sorted[Math.floor(sorted.length * 0.5)] : 0;
   const hi = delta ? sorted[Math.floor(sorted.length * 0.995)] : 1;
   // rank01 via the plateau-sorted table: binary search per pixel is fine
@@ -868,10 +874,21 @@ function tonalTip(field, sorted, depth) {
     }
     return a / (sorted.length - 1);
   };
+  // "lognormal": damage = e^(σ·field), the multiplicative cascade. The mask
+  // accumulates a GEOMETRIC mean, so a lognormal damage map is this
+  // architecture's exact fixed point — averaging n windows leaves the
+  // distribution lognormal with σ/√n, which `gain` puts back exactly. A
+  // uniform (rank) map does not survive that averaging in shape, only in
+  // rank order. σ sets intermittency: the median lands at e^(−2.58σ) of
+  // full damage, so the field reads as mostly-intact with rare deep bites.
+  const sigma = t.sigma ?? 1;
+  const top = sorted[Math.floor(sorted.length * 0.995)];
   const damageAt = (i) => {
-    let d = delta
-      ? clamp((field[i] - lo) / Math.max(hi - lo, 1e-9), 0, 1)
-      : rank01(field[i]);
+    let d;
+    if (mode === 'lognormal') d = Math.exp(sigma * (field[i] - top));
+    else if (delta) d = clamp((field[i] - lo) / Math.max(hi - lo, 1e-9), 0, 1);
+    else d = rank01(field[i]);
+    d = clamp(d, 0, 1);
     // invert: the STRUCTURE keeps full paint and the ground carves — a
     // mid-tone material with darker marks (scratches as shadowed gouges)
     // instead of a solid material with lightened marks
@@ -886,12 +903,22 @@ function tonalTip(field, sorted, depth) {
     logG /= field.length;
   }
   const G = Math.exp(logG);
+  const out = new Float64Array(field.length);
   for (let i = 0; i < field.length; i++) {
-    let damage = damageAt(i);
-    if (t.gain && t.gain !== 1) {
-      damage = clamp(G * Math.pow(damage / G, t.gain), t.floor ?? 1e-12, 1);
-    }
-    const carve = depth * damage;
+    const d = damageAt(i);
+    out[i] =
+      t.gain && t.gain !== 1 ? clamp(G * Math.pow(d / G, t.gain), t.floor ?? 1e-12, 1) : d;
+  }
+  return out;
+}
+
+/** Damage map → stamp values, with the train's value curve and the vignette. */
+function tonalTip(field, sorted, depth) {
+  const nBar = 0.8 / ((spec.train.dual.spacing ?? 0.33) * 0.95);
+  const damage = damageMap(field, sorted);
+  const data = new Uint8Array(N * N);
+  for (let i = 0; i < damage.length; i++) {
+    const carve = depth * damage[i];
     const v = 1 - Math.pow(Math.max(carve, 1e-12), 1 / nBar) * (carve > 0 ? 1 : 0);
     data[i] = Math.round(clamp(v * (vignette ? vignette[i] : 1), 0, 1) * 255);
   }
@@ -1139,6 +1166,26 @@ function toneBytes(field) {
     data[order[rank]] = Math.round((rank / (order.length - 1)) * 255);
   }
   return data;
+}
+
+// --field [depth]: atlas mode — write the damage map as the tone a stroke
+// would carry (ink on paper at that depth), and stop. For a spectral
+// texture on a deep train the stroke reproduces the field, so this is a
+// faithful preview at a fraction of the cost of painting one; it is how
+// docs/spectral-atlas.md sweeps candidates before any of them is painted.
+const fieldIdx = argv.indexOf('--field');
+if (fieldIdx >= 0) {
+  const depth = Number(argv[fieldIdx + 1]) || 0.55;
+  const damage = damageMap(baseField, plateauSorted(baseField));
+  const bytes = new Uint8Array(N * N);
+  for (let i = 0; i < damage.length; i++) {
+    // ink = 1 − depth·damage; shown as ink on white, like every other crop
+    bytes[i] = Math.round(clamp(depth * damage[i], 0, 1) * 255);
+  }
+  const out = join(outDir, `${spec.name}.field.png`);
+  writeFileSync(out, encodeGrayPng(bytes, N, N));
+  console.log(`  ${out}  (damage at depth ${depth})  in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+  process.exit(0);
 }
 
 // --swatch a,b,c: exploration mode — write the continuous field plus flat

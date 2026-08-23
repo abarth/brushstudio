@@ -17,6 +17,7 @@ Then, as needed:
 | --- | --- |
 | `docs/parameters.md` | what the knobs do, and the ratios between them that actually decide a mark |
 | `docs/fractal-texture-math.md` | the frequency-domain model of a stroke — read before designing a natural-texture brush or a coverage-graded family |
+| `docs/spectral-atlas.md` | the map of 2-D power spectra: what each region paints, what makes one fractal, and what has been swept so far |
 | `docs/brush-format.md` | the brush document format |
 | `docs/abr.md` | studying and shipping Photoshop packs |
 | `docs/backends.md` | the two renderers, and when the default is the wrong one |
@@ -37,6 +38,7 @@ npm run dev                                            # paint with it by hand
 
 node tools/fractal-tip.mjs tips/x.spec.json --calibrate  # synthesize + calibrate texture tips
 node tools/spectrum-audit.mjs brushes/x.json             # comb/spike/isotropy/β on painted marks
+node tools/fractal-tip.mjs tips/x.spec.json --field       # ~1s damage-map preview, for sweeping spectra
 node tools/accumulation-survey.mjs                       # what the dual gate can and cannot do to tone
 
 npm test                 # the harness suite, CPU renderer (~4s)
