@@ -88,11 +88,27 @@ function bandPower(b, k) {
 }
 
 /**
- * Target power: a single band, or a weighted sum of them. A material with
- * two characteristic populations — rust's spread patches and its fine
- * pitting, say — is two bands with independent weights; each is normalized
- * at its own shoulder so `weight` compares like with like.
+ * Angular window for a band confined to a wedge (`sectorDeg`, the Gaussian
+ * half-width in degrees, about `sectorAxisDeg`).
+ *
+ * `stretchX` squeezes the passband affinely, which turns round blobs into
+ * ellipses — elongated lobes, all orientations still present. A wedge
+ * instead deletes every orientation but one, and THAT is what makes
+ * parallel crests: ripples, drapery folds, combed clay. The axis is the
+ * direction of the wavevector, so `sectorAxisDeg: 0` gives crests running
+ * vertically (the field varies along x). The spectrum of a real field is
+ * centro-symmetric, so the window folds onto a half turn.
  */
+function sectorWeight(fx, fy, b) {
+  if (fx === 0 && fy === 0) return 0;
+  let d = Math.atan2(fy, fx) - ((b.sectorAxisDeg ?? 0) * Math.PI) / 180;
+  d = Math.atan2(Math.sin(d), Math.cos(d));
+  if (d > Math.PI / 2) d -= Math.PI;
+  if (d < -Math.PI / 2) d += Math.PI;
+  const t = d / ((b.sectorDeg * Math.PI) / 180);
+  return Math.exp(-t * t);
+}
+
 const COMPONENTS = (sp.components ?? [sp]).map((b) => {
   // Normalize each band by its per-OCTAVE variance (2-D: ∝ k²·S) at its own
   // shoulder, so `weight` compares the variance the eye sees. Per-mode
@@ -100,8 +116,29 @@ const COMPONENTS = (sp.components ?? [sp]).map((b) => {
   // count — a 0.35-weight pit band at k≈22 buried a unit bloom band at
   // k≈2.5 under 27× its variance.
   const anchor = Math.max(b.shoulderCyclesPerDia, b.bandLoCyclesPerDia);
-  return { ...b, norm: 1 / Math.max(bandPower(b, anchor) * anchor * anchor, 1e-30) };
+  let norm = 1 / Math.max(bandPower(b, anchor) * anchor * anchor, 1e-30);
+  // a wedge keeps only a fraction of the annulus, so divide that fraction
+  // out too — otherwise `weight` stops comparing like with like the moment
+  // one band is directional and another is not
+  if (b.sectorDeg) {
+    let acc = 0;
+    const STEPS = 720;
+    for (let i = 0; i < STEPS; i++) {
+      const th = -Math.PI / 2 + (Math.PI * (i + 0.5)) / STEPS;
+      acc += sectorWeight(Math.cos(th), Math.sin(th), { ...b, sectorAxisDeg: 0 });
+    }
+    norm /= Math.max(acc / STEPS, 1e-6);
+  }
+  return { ...b, norm };
 });
+/**
+ * Target power: a single band, or a weighted sum of them. A material with
+ * two characteristic populations — rust's spread patches and its fine
+ * pitting, say — is two bands with independent weights; each is normalized
+ * at its own shoulder so `weight` compares like with like. Radial only, for
+ * the generators that want a plain isotropic curve; `targetPowerAt` is the
+ * one the synthesis filter uses.
+ */
 function targetPower(k) {
   let s = 0;
   for (const b of COMPONENTS) s += (b.weight ?? 1) * b.norm * bandPower(b, k);
@@ -139,7 +176,8 @@ function scatterTransfer(fPerPx) {
  * `stretchX > 1` squeezes the passband in fx, elongating that band's
  * structure along x: the anisotropy of brushed metal, drag marks, striated
  * stone. `stretchY` is the same on the other axis, so two components
- * stretched on opposite axes cross into a weave. It reads per component before falling back to the spectrum-wide
+ * stretched on opposite axes cross into a weave. For crests rather than
+ * lobes, see `sectorDeg` — anisotropy by deletion, not by squeezing. It reads per component before falling back to the spectrum-wide
  * value, which is what lets one field carry coarse strata stretched flat
  * under isotropic fine grain — anisotropy that changes with scale, the way
  * a real bedded or grained material's does.
@@ -150,7 +188,9 @@ function targetPowerAt(fx, fy) {
     const sx = b.stretchX ?? sp.stretchX ?? 1;
     const sy = b.stretchY ?? sp.stretchY ?? 1;
     const k = Math.hypot(fx * sx, fy * sy) * N;
-    s += (b.weight ?? 1) * b.norm * bandPower(b, k);
+    let p = (b.weight ?? 1) * b.norm * bandPower(b, k);
+    if (p > 0 && b.sectorDeg) p *= sectorWeight(fx, fy, b);
+    s += p;
   }
   return s;
 }

@@ -89,18 +89,30 @@ reach.
 | outer scale | `shoulderCyclesPerDia`, `lowSlope` | the largest structure; caps coarse variance so the tip is a texture and not a blob |
 | inner scale | `cutCyclesPerDia`, `taperCyclesPerDia` | how fine the material gets before it goes smooth |
 | bandwidth | shoulder ≈ knee | a narrow band is a **ring**: one scale, random phase |
-| anisotropy | `stretchX`, `stretchY`, per component | direction; per-band, so it can change with scale |
+| anisotropy | `stretchX`, `stretchY`, per component | direction by *squeezing*: blobs become ellipses, every orientation still present |
+| orientation | `sectorDeg`, `sectorAxisDeg`, per component | direction by *deletion*: one orientation survives, which is what makes crests |
 | composition | `components[]` | sums of bands, including deliberate gaps |
 | histogram | `tonal.mode`, `sigma`, `gain` | rank-uniform vs lognormal cascade (§1) |
 
-Two notes on anisotropy. `stretchX` is an affine squeeze of the passband, so
-it turns blobs into ellipses; it does **not** select a direction of travel,
-and a ring stretched on one axis gives elongated lobes rather than parallel
-wave crests. Crests need an angular wedge, which is not implemented. And
-because dual stamps mirror but never rotate, an anisotropic mask's axis is
-**fixed to the canvas**: the fibre runs the same way whichever way the stroke
-goes, so a curved stroke crosses its own grain. That is either a material
-property (a brushed panel) or a defect, depending on the material.
+Three notes on direction. **Squeezing and deleting are not the same
+operation.** `stretchX` is an affine squeeze of the passband: blobs become
+ellipses, but every orientation is still present, so a stretched ring gives
+elongated *lobes*. A wedge (`sectorDeg`, a Gaussian half-width in degrees
+about `sectorAxisDeg`) deletes all but one orientation, and that is what
+produces parallel *crests* — ripples, folds, combed clay. It is the single
+highest-yield knob found so far: the two highest delivered-contrast
+textures measured anywhere in this atlas are both wedges.
+
+**The axis is the wavevector, not the crest.** `sectorAxisDeg: 0` makes the
+field vary along x, so the crests run vertically; add 90° to turn them.
+Against a horizontal stroke those two choices read completely differently —
+crests *across* the mark (hatching it) versus *along* it (a fibrous drag) —
+so the axis is a brush-design decision, not a detail.
+
+**The axis is fixed to the canvas.** Dual stamps mirror but never rotate, so
+the grain runs the same way whichever way the stroke goes and a curved
+stroke crosses its own grain. For sand, bedding or a brushed panel that is a
+material property. For anything meant to follow the hand, it is a defect.
 
 ## 3. Catalogue
 
@@ -118,6 +130,17 @@ audit's delivered-contrast measure.
 | **vapour** | β=4, one octave | haze, atmosphere, soft airbrush | good — an effect, not a material |
 | **frost** | notch at 1.5 + 24 c/dia | spray landing on a coarse surface | good — two scales with nothing between |
 | **cut 8** | β=2.4, inner scale 8 | soft-focus wash, no fine detail | good — 4.5%, distinctive by *absence* |
+| **sand** | ring k=10 + wedge 18° | rippled sand, wind-drift, water | **strong** — 10.4%, the highest delivered contrast measured; dislocations come free from the random phase |
+| **comb** | ring k=16 + wedge 12° | combed clay, corduroy, drawn fibre | **strong** — 10.0%, crisp and graphic |
+| **herringbone** | two wedges at ±40° | crosshatch, woven mesh, hatched shading | **strong** — 8.5% at the lowest ripple of the group (1.7%) |
+| **swell** | ring k=4 + wedge 30° | crossing wave trains, interference | good — 7.7%, chunkier and more organic than sand |
+| **strata (reworked)** | coarse ×9, grain at 0.18 | bedded sediment, weathered plank | good — 7.5%; the first version buried its coarse band, this one does not |
+| **drape** | β=3.0 + wedge 25° | cloth folds at every scale | good — 4.7%, soft; wants more depth to read |
+| **vesicle** | ring k=16 + lognormal σ=0.8 | beaded, vesicular basalt | good — 4.6%, the two most distinctive axes crossed |
+| **pit** | ring k=8 + lognormal σ=1.0 | scattered round pitting | fair — 3.2%, subtle at depth 0.55 |
+| **cascade σ=0.45** | lognormal, low σ | intermittent cloud with real contrast | good — the retune the sparse σ=1.2 version needed |
+| **ring + power-law floor** | ring k=10 over β=2.4 | cells lost in roughness | weak — the floor swamps the cellular band |
+| **ring k=2.5** | very low ring | big soft lobes | weak — coarser than the tip can carry |
 | **stretchX 15** | strong single-axis squeeze | combed, dragged, brushed panel | conditional — canvas-fixed axis (§2) |
 | **crossed rings** | rings on both axes | weave, basket, plaid | conditional — legible but reads regular |
 | **cascade σ=1.2** | lognormal damage | intermittent, rare deep bites | needs work — too sparse at depth 0.55; wants higher depth or lower σ |
@@ -144,14 +167,21 @@ delivers that design rather than a flattened version of it (math doc §6).
 
 ## 5. Open directions
 
-* **Angular wedges.** Power inside ±θ of an axis, rather than an affine
-  squeeze — the only way to get parallel wave crests (rippled sand, water,
-  drapery) instead of elongated lobes.
-* **Rings with a shoulder.** A ring on top of a power-law floor: cellular
-  structure embedded in scale-free roughness, rather than either alone.
-* **Cascade × ring.** Lognormal damage on a ring spectrum — intermittent
-  cellular decay. The two most distinctive axes have not been crossed.
-* **Spectra that change along the stroke.** Nothing in the engine varies the
-  mask with pressure, but two brushes at different `cut` values are a pair a
-  painter can switch between; a coverage-style family graded by inner scale
-  rather than by depth is unexplored.
+* **The crest axis, chosen deliberately.** Everything swept so far runs its
+  wavevector along x (crests across a horizontal stroke). The 90° variants —
+  grain running *along* the mark — are one number away and probably the more
+  useful half for a painter.
+* **Wedge × cascade, aimed properly.** Intermittent damage confined to one
+  direction is runs, drips and weathering streaks. The first attempt pointed
+  its axis the wrong way and made horizontal wisps (a good cirrus texture,
+  the wrong drip); `sectorAxisDeg: 0` with a narrow wedge is the version to
+  try.
+* **Wedge width as a family dial.** 12° / 18° / 30° / 55° is a legible
+  progression from graphic striation to a mild directional bias — a
+  three-level family in the same sense that depth is one.
+* **Curved and defected crests.** A wedge whose axis rotates slowly across
+  the field (or a domain warp applied after synthesis) would give flow lines
+  and fingerprint whorls rather than straight ripples.
+* **A family graded by inner scale.** `cut` at 8 / 20 / 60 c/dia is a real
+  progression — soft-focus to granular — and is orthogonal to the depth
+  dial every family currently uses.
