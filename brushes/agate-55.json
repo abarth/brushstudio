@@ -1,7 +1,7 @@
 {
   "name": "Agate 55",
   "id": "agate-55",
-  "notes": "Billowy agate wash: three coarse fat vein octaves under a strong flow warp. Stroke-tested pre-promotion: no characteristic-frequency bump, no comb. Dual-gate architecture (docs/fractal-texture-math.md par.9): the mask multiplies the finished stroke once, so its structure survives the paint train; canvas-anchored delivery was considered for the damage textures and rejected in review in favour of dual-gating everything. Tips synthesized and calibrated from tips/agate.spec.json (levels 30/55/80 = core-band stroke coverage); spectral verification by tools/spectrum-audit.mjs. The full billow.",
+  "notes": "Billowy agate wash: three coarse fat vein octaves under a strong flow warp. Stroke-tested pre-promotion: no characteristic-frequency bump, no comb. Dual-gate architecture (docs/fractal-texture-math.md par.9): the mask multiplies the finished stroke once, so its structure survives the paint train; canvas-anchored delivery was considered for the damage textures and rejected in review in favour of dual-gating everything. Tips synthesized and calibrated from tips/agate.spec.json (levels 30/55/80 = core-band stroke coverage); spectral verification by tools/spectrum-audit.mjs. The full billow. REVISED to a TONAL mask on a deep, fully scattered train: the mask is the tone-mapped field itself rather than a threshold cut, and the level is the modulation DEPTH. Dual spacing 0.33 -> 0.07 (n=12 overlap) with scatter kept at 0.7 - a Gaussian field averages to the same field, so this one can spend the overlap that buys the scatter, where a faceted texture could not (docs/fractal-texture-math.md §6). Ripple 9-11% -> 1.8-3.5%, comb 18-24% -> 1.1-4.2%.",
   "tips": {
     "mask": {
       "image": "../tips/agate-55.png"
@@ -27,7 +27,7 @@
       "enabled": true,
       "shape": "@mask",
       "size": 156,
-      "spacing": 0.33,
+      "spacing": 0.07,
       "scatter": 0.7,
       "bothAxes": true,
       "count": 1,

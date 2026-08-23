@@ -1,57 +1,64 @@
 {
-  "name": "cloud",
-  "notes": "Domain-warped cloud: the soft cumulus spectrum resampled through a low-frequency displacement - advected billows. The un-warped variant lives on in this spec's history; the warped field won review as the more cloud-like. Levels 30/55/80 = light/medium/heavy, calibrated to core-band stroke coverage by tools/fractal-tip.mjs --calibrate; verified by tools/spectrum-audit.mjs.",
-  "native": 1024,
-  "seed": 20549991,
-  "outDir": ".",
-  "field": {
-    "kind": "warped",
-    "warp": 0.1,
-    "warpK": 2.5
+ "name": "cloud",
+ "notes": "Domain-warped cloud: the soft cumulus spectrum resampled through a low-frequency displacement - advected billows. The un-warped variant lives on in this spec's history; the warped field won review as the more cloud-like. Levels 30/55/80 = light/medium/heavy, calibrated to core-band stroke coverage by tools/fractal-tip.mjs --calibrate; verified by tools/spectrum-audit.mjs. REVISED to a TONAL mask on a deep, fully scattered train (docs §6). As a coverage cut on a shallow scattered train this was the collection's worst splotcher - the stamp count wandered and the union filled unevenly (ripple 9-11%, comb 18-24% of tone). The overlap budget fixes it, and this texture can afford it: a union of binary sets fills rather than averages, but a tonal mask accumulates the GEOMETRIC MEAN of the stamps' damage, and the average of independent windows of a Gaussian field is the same field - so the phase mush that would ruin a faceted texture costs a billowy one nothing. Dual spacing 0.33 -> 0.07 (n=12) with scatter kept at 0.7; scatterDeconv back on, since a wide kernel really does smear; tonal.gain 3 restores the log-contrast the deep average costs (about the geometric mean, so the tone stays put) and tonal.floor 0.02 stops a single stamp's field minimum from punching a full-ink speck through the stack. Levels 30/55/80 are now damage DEPTH, not coverage.",
+ "native": 1024,
+ "seed": 20549991,
+ "outDir": ".",
+ "field": {
+  "kind": "warped",
+  "warp": 0.1,
+  "warpK": 2.5
+ },
+ "spectrum": {
+  "bandLoCyclesPerDia": 0.5,
+  "shoulderCyclesPerDia": 1.6,
+  "lowSlope": 1.2,
+  "beta": 3,
+  "kneeCyclesPerDia": 5,
+  "beta2": 4,
+  "cutCyclesPerDia": 45,
+  "taperCyclesPerDia": 55
+ },
+ "vignette": {
+  "inner": 0.84,
+  "rag": 0.18
+ },
+ "aaCanvasPx": 0.7,
+ "train": {
+  "size": 120,
+  "flow": 0.9,
+  "primary": {
+   "hardness": 0.85,
+   "spacing": 0.12,
+   "sizeJitter": 0.15,
+   "minDiameter": 0.45
   },
-  "spectrum": {
-    "bandLoCyclesPerDia": 0.5,
-    "shoulderCyclesPerDia": 1.6,
-    "lowSlope": 1.2,
-    "beta": 3,
-    "kneeCyclesPerDia": 5,
-    "beta2": 4,
-    "cutCyclesPerDia": 45,
-    "taperCyclesPerDia": 55
+  "dual": {
+   "sizeRatio": 1.3,
+   "spacing": 0.07,
+   "scatter": 0.7,
+   "count": 1
+  }
+ },
+ "levels": [
+  {
+   "coverage": 0.3,
+   "depth": 0.3
   },
-  "vignette": {
-    "inner": 0.8,
-    "rag": 0.22
+  {
+   "coverage": 0.55,
+   "depth": 0.55
   },
-  "aaCanvasPx": 0.7,
-  "train": {
-    "size": 120,
-    "flow": 0.9,
-    "primary": {
-      "hardness": 0.85,
-      "spacing": 0.12,
-      "sizeJitter": 0.15,
-      "minDiameter": 0.45
-    },
-    "dual": {
-      "sizeRatio": 1.3,
-      "spacing": 0.33,
-      "scatter": 0.7,
-      "count": 1
-    }
-  },
-  "levels": [
-    {
-      "coverage": 0.3,
-      "q": 0.1145
-    },
-    {
-      "coverage": 0.55,
-      "q": 0.2582
-    },
-    {
-      "coverage": 0.8,
-      "q": 0.4287
-    }
-  ]
+  {
+   "coverage": 0.8,
+   "depth": 0.8
+  }
+ ],
+ "maskMode": "tonal",
+ "tonal": {
+  "mode": "modulate",
+  "gain": 3,
+  "floor": 0.02
+ },
+ "scatterDeconv": true
 }

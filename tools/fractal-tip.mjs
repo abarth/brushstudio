@@ -811,6 +811,26 @@ const vignette = (() => {
  * every value populated, depth sets the visible contrast); "delta" ramps
  * from the field's median to its 99.5th percentile, so a mostly-background
  * field (scratches) leaves the baseline untouched at exactly 0 damage.
+ *
+ * `gain` and `floor` exist because that value curve inverts the MEAN and
+ * nothing else. Put the accumulation in logs and what the mask computes is
+ * the geometric mean of the stamps' damages:
+ *
+ *   ln(1 − m) = Σ ln(1 − vᵢ) = ln depth + (1/n̄)·Σ ln dᵢ
+ *   ⇒ 1 − m = depth · GM(d)
+ *
+ * which says two things. The log-contrast of n̄ near-independent samples
+ * falls as 1/√n̄, so a deep train delivers a flatter mark than the field
+ * asks for — `gain` puts it back by stretching ln d about its own mean,
+ * `d ← G·(d/G)^gain` with `G` the field's geometric mean. Stretching about
+ * G rather than raising d to a power is the whole point: a bare `d^gain`
+ * scales the spread and the mean together, which lightens the mark instead
+ * of sharpening it. `gain ≈ √n̄` for fully independent stamps, less when
+ * the scatter is short against the field's correlation length — tune it
+ * against the audit's `texture %`. And a geometric mean is dragged to zero
+ * by any one near-zero sample, so a single stamp landing its field minimum
+ * punches a full-ink speck through the whole stack: `floor` bounds ln d
+ * from below and the specks go away. Both default to inert.
  */
 function tonalTip(field, sorted, depth) {
   const t = spec.tonal ?? {};
@@ -830,14 +850,29 @@ function tonalTip(field, sorted, depth) {
     }
     return a / (sorted.length - 1);
   };
-  for (let i = 0; i < field.length; i++) {
-    let damage = delta
+  const damageAt = (i) => {
+    let d = delta
       ? clamp((field[i] - lo) / Math.max(hi - lo, 1e-9), 0, 1)
       : rank01(field[i]);
     // invert: the STRUCTURE keeps full paint and the ground carves — a
     // mid-tone material with darker marks (scratches as shadowed gouges)
     // instead of a solid material with lightened marks
-    if (t.invert) damage = 1 - damage;
+    if (t.invert) d = 1 - d;
+    return t.floor ? t.floor + (1 - t.floor) * d : d;
+  };
+  // the geometric mean the accumulation lands on, so `gain` can stretch the
+  // log-contrast about it without moving the mark's tone
+  let logG = 0;
+  if (t.gain && t.gain !== 1) {
+    for (let i = 0; i < field.length; i++) logG += Math.log(Math.max(damageAt(i), 1e-12));
+    logG /= field.length;
+  }
+  const G = Math.exp(logG);
+  for (let i = 0; i < field.length; i++) {
+    let damage = damageAt(i);
+    if (t.gain && t.gain !== 1) {
+      damage = clamp(G * Math.pow(damage / G, t.gain), t.floor ?? 1e-12, 1);
+    }
     const carve = depth * damage;
     const v = 1 - Math.pow(Math.max(carve, 1e-12), 1 / nBar) * (carve > 0 ? 1 : 0);
     data[i] = Math.round(clamp(v * (vignette ? vignette[i] : 1), 0, 1) * 255);

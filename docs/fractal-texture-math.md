@@ -489,11 +489,36 @@ phase argument again, now in the tonal domain, and it sets the rule:
 One caveat on spending that budget: it is only available to a *tonal* mask.
 A coverage cut accumulates binary sets, and a union of sets does not
 average — it fills — so deeper overlap destroys a print rather than
-smoothing it (§4). The coverage-cut members of the shipped collection are
-the collection's worst splotchers for exactly this reason (Agate 55:
-`ripple` 8.9%, `comb p-p` 18%; Cloud 55: 10.6% and 23.7%, against 1.2–2.8%
-and 1.3–9.2% for the tonal five); the route open to them is conversion to a
-tonal mask first, then the overlap.
+smoothing it (§4). Agate and Cloud were built as coverage cuts on a wide
+shallow train and were the collection's worst splotchers for exactly this
+reason (Agate 55: `ripple` 8.9%, `comb p-p` 18%; Cloud 55: 10.6% and 23.7%,
+against 1.2–2.8% and 1.3–9.2% for the tonal five). Converting them to tonal
+masks first, then spending the overlap, is what the rule prescribes and what
+they now ship as: scatter 0.7 at `n̄` 12, `ripple` 1.8–3.5%, `comb p-p`
+1.1–4.2%.
+
+**What a tonal mask actually accumulates is a geometric mean.** Putting the
+over-composite in logs, with `v = 1 − (depth·d)^(1/n̄)` per stamp:
+
+```
+ln(1 − m) = Σ ln(1 − vᵢ) = ln depth + (1/n̄)·Σ ln dᵢ    ⇒   1 − m = depth·GM(d)
+```
+
+Two consequences, both of which have knobs in `tools/fractal-tip.mjs`:
+
+* The log-contrast of `n̄` near-independent samples falls as `1/√n̄` — this
+  *is* the `texture %` column of the table above. Restore it with
+  `tonal.gain`, which stretches `ln d` about its own mean
+  (`d ← G·(d/G)^gain`). Stretching about `G` is the point: a bare `d^gain`
+  scales the spread and the mean together and only lightens the mark —
+  measured, it *lost* contrast (Agate 55, `texture %`: 4.8 → 2.9 at a naive
+  gain of 2, versus 6.5 at a mean-preserving gain of 3).
+* A geometric mean is dragged to zero by any single near-zero sample, so one
+  stamp landing its field minimum sets `m → 1` and punches a full-ink speck
+  through the whole stack — visible as black dots on an otherwise smooth
+  deep-train mark. `tonal.floor` bounds `ln d` from below and they vanish.
+  The deeper the train, the more stamps get the chance, so a floor is
+  effectively mandatory past `n̄ ≈ 6`.
 
 One approximation remains, checked by the stroke-window comparison rather
 than assumed: overlapping stamps sample the same bitmap under mirror
