@@ -39,7 +39,7 @@ families, at `tips/<name>.spec.json` with 30/55/80 depth levels in
 | **strata** | coarse ×9 + thin grain | deep | 6.6 | bedded sediment, weathered plank |
 | **vesicle** | ring k=16 + lognormal σ=0.8 | deep | 4.4 | vesicular basalt, beaded glaze |
 
-Every one clears §7's bars at depth 0.55 (ripple 1.1–2.8%, comb p-p
+Every one clears the acceptance bars at depth 0.55 (ripple 1.1–2.8%, comb p-p
 0.8–3.7%). Two needed their rigid train tightened past the family default
 to get there — woodgrain to spacing 0.14, drape to 0.18 — because a
 scale-free wedge carries coarse power right where the count staircase sits.
@@ -49,10 +49,8 @@ material territory (no two of the twelve are the same idea at different
 settings), and review — the directional group, the rings and the lognormal
 mapping were all asked for by name.
 
-**Held in reserve**, measured and ready but not promoted: swell (crossing
-wave trains, 7.7%), brushed panel (9.5%), the wedge-width dial as a family
-axis in its own right, vapour, frost, cut-8 soft focus, the 3-rung ladder,
-and the σ=0.45 cascade. The notes below are what they are for.
+**Held in reserve** — measured, ready, and written out in §7 so the next
+group can be promoted without re-deriving anything.
 
 ### Why the directional group led the selection
 
@@ -256,15 +254,36 @@ Exploration specs carry no `tonal.gain`, so the preview shows the design
 itself. Add `gain ≈ 3` and `floor 0.02` when promoting, so the deep train
 delivers that design rather than a flattened version of it (math doc §6).
 
-## 6. Open directions
+## 6. The next group
 
-* **A family graded by inner scale.** `cut` at 8 / 20 / 60 c/dia is a real
-  progression — soft-focus to granular — and is orthogonal to the depth dial
-  every family currently uses. So is the wedge-width dial (§3, group M).
-* **Warp strength as a dial.** `warp.amp` from 0 to 0.09 runs straight
-  ripple → flow → whorl on one spectrum. Untested as a graded family, and it
-  crosses the phase boundary partway along, which makes the train choice
-  interesting rather than obvious.
+Eight candidates were swept, measured and left out of the twelve — not
+because they failed but because the twelve already covered their territory
+or beat them on contrast. They are the obvious second set, and each is one
+`tips/<name>.spec.json` away. Spectra are given in the same shorthand the
+promoted specs use: `ring(k, w)` is a narrow band at `k` c/dia with
+`lowSlope: w`; `outer(β, sh)` is a power law with its shoulder at `sh`.
+
+| candidate | spectrum | train | texture % | why it is worth having |
+| --- | --- | --- | --- | --- |
+| **swell** | `ring(4, 4)` + wedge 30° | deep | 7.7 | crossing wave trains — the only coarse directional entry; sand and corduroy are both fine-scale |
+| **brushed** | `outer(2.6, 3)` wedge 20° + `ring(30, 4)` wedge 25° at 90°, w 0.5 | deep | 9.5 | two directions at two scales: a drag over a drag, which is what a brushed panel actually is |
+| **width dial** | `ring(12, 6)` + wedge 5 / 12 / 30 / 55° | deep | 10.4–10.5 | a **family axis orthogonal to depth**: corrugation → ripple → broken crest → mild bias. The only candidate here that is a *dimension* rather than a texture |
+| **vapour** | `outer(4.0, 0.9)`, cut 20 | deep | 1.3 | haze and soft airbrushing; an effect rather than a material, and the only entry with no fine detail at all |
+| **frost** | `outer(3.2, 1.5)` cut 6 + `outer(1.0, 24)` from 16, w 0.8 | deep | 7.2 | a notch: fine spray sitting *on* a coarse surface, which the eye reads as two materials rather than one continuum |
+| **cut-8** | `outer(2.4, 2.5)`, cut 8 | deep | 4.5 | distinctive by *absence* — a soft-focus wash with no grain, which nothing in the twelve provides |
+| **ladder** | `ring(2, 5)` + `ring(7, 5)` w 0.8 + `ring(24, 5)` w 0.6 | deep | 6.6 | discrete rungs instead of a continuum; reads more "natural" than a smooth slope for reasons §1 calls lacunarity |
+| **cascade σ=0.45** | `outer(2.6, 2.5)`, lognormal | deep | — | the retuned intermittent cloud; the lognormal mapping applied to a plain power law rather than to a ring |
+
+Three of these are more interesting as *dimensions* than as single brushes,
+and that is the note to carry forward. The width dial is one; so is
+`warp.amp` swept 0 → 0.09 on a fixed spectrum, which runs straight ripple →
+flow → whorl and **crosses the phase boundary partway along** (§4), so the
+train would have to change mid-family — the first family here whose levels
+would not share a train. So is `cut` at 8 / 20 / 60, which grades a material
+from soft-focus to granular without touching its depth.
+
+## 7. Open directions
+
 * **Runs and drips, deeper.** The wedge × cascade idea reads at depth 0.55
   but wants 0.8; and a wedge whose cascade is anisotropic too (long in the
   run direction) would give the tapering streak a real drip has.

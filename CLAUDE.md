@@ -16,6 +16,7 @@ Then, as needed:
 | | |
 | --- | --- |
 | `docs/parameters.md` | what the knobs do, and the ratios between them that actually decide a mark |
+| `docs/whitepaper.md` | the method end to end, for a reader who knows signal processing — start here for why, not how |
 | `docs/fractal-texture-math.md` | the frequency-domain model of a stroke — read before designing a natural-texture brush or a coverage-graded family |
 | `docs/spectral-atlas.md` | the map of 2-D power spectra: what each region paints, what makes one fractal, and what has been swept so far |
 | `docs/brush-format.md` | the brush document format |
