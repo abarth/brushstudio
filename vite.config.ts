@@ -1,5 +1,7 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'node:path';
+// @ts-expect-error - a plain .mjs tool module, typed by its JSDoc not by .d.ts
+import { spectrumLab } from './tools/lib/lab.mjs';
 
 /**
  * Two entry points share one bundle of engine code:
@@ -9,6 +11,9 @@ import { resolve } from 'node:path';
  */
 export default defineConfig({
   base: process.env.BASE_PATH ?? '/',
+  // the spectrum lab's two dev-only endpoints: synthesize a tip from
+  // spectrum parameters, and keep a candidate by writing it into the repo
+  plugins: [spectrumLab()],
   server: {
     // The CLI holds the page open for the length of a command. With HMR on,
     // saving any file mid-run reloads it and the command dies with

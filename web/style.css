@@ -375,3 +375,134 @@ input[type='search']::-webkit-search-cancel-button { filter: grayscale(1) opacit
 #changes { margin-right: auto; font-size: 11px; color: var(--accent); }
 .acts button { font-size: 11px; padding: 2px 8px; }
 .check { display: inline-flex; align-items: center; gap: 5px; color: var(--dim); cursor: pointer; }
+
+/* --- the spectrum lab ----------------------------------------------------
+   A popover like the library, because it is a place you go rather than a
+   thing you watch: parameters, a synthesized tip, and the two ways out —
+   copy the spec, or keep it as files in the repo. */
+.labrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+}
+.labrow[hidden] {
+  display: none;
+}
+.labname {
+  font-size: 11px;
+  opacity: 0.8;
+  cursor: help;
+  white-space: nowrap;
+}
+.labrow select {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 11px;
+}
+.labacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 6px;
+}
+.labacts input {
+  flex: 1 1 100px;
+  min-width: 90px;
+  font: inherit;
+  font-size: 11px;
+}
+.labshot {
+  display: block;
+  width: 100%;
+  border-radius: 3px;
+  image-rendering: auto;
+}
+
+/* the panel's two modes: the engine's settings, or the spectrum lab */
+#modes {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  padding: 8px var(--pad) 0;
+}
+#modes button {
+  flex: 1;
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 0;
+}
+#modes button.on {
+  background: var(--sunk);
+  color: var(--fg);
+}
+aside[data-mode='lab'] #rail,
+aside[data-mode='lab'] #controls,
+aside[data-mode='lab'] #patch,
+aside[data-mode='lab'] #bar {
+  display: none;
+}
+aside[data-mode='lab'] #labpanel {
+  display: block;
+}
+#labpanel {
+  display: none;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 10px var(--pad) 16px;
+}
+
+/* the lab's read-outs: the two tips, the spectrum strip, the radial plot */
+.labpair {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+.labfig {
+  flex: 1;
+  margin: 0;
+  min-width: 0;
+}
+.labfig[hidden] {
+  display: none;
+}
+.labfig figcaption {
+  font-size: 10px;
+  color: var(--faint);
+  text-align: center;
+  padding-top: 2px;
+}
+.labhead {
+  margin: 12px 0 3px;
+  font-size: 10px;
+  color: var(--faint);
+  cursor: help;
+}
+.labdiag,
+.labplot {
+  display: block;
+  width: 100%;
+  border-radius: 3px;
+}
+.labplot {
+  margin-top: 8px;
+  background: var(--sunk);
+  height: auto;
+}
+.labnote {
+  margin: 5px 0 0;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--faint);
+}
+.labcaps {
+  display: flex;
+  font-size: 10px;
+  color: var(--faint);
+}
+.labcaps span {
+  flex: 1;
+  text-align: center;
+}

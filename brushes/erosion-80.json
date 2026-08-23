@@ -1,0 +1,38 @@
+{
+  "name": "Erosion 80",
+  "id": "erosion-80",
+  "notes": "Flaked paint as a coverage family: level N = N% of the film REMAINING, so the ladder runs from a few surviving flakes (10) to craquelure with a few lost chips (90). One cellular survival field (tips/erosion.spec.json: three Worley scales of per-cell random values + a clustering fbm - a dip along the coarsest cell walls) thresholded at nine NESTED levels: paint only ever disappears as the level drops, so the family is one surface progressively flaking. Whole cells drop at once, which is what makes the chips angular - a Gaussian field cannot do this (phase, docs/fractal-texture-math.md par.4) - and the wall dip keeps the crack lines below threshold at high coverage. Dual-gate train as oil-sponge; AA at 0.45 canvas px because a paint film breaks sharply. Audited comb-free and isotropic. Craquelure with chips: hairline cracks, scattered losses.",
+  "tips": {
+    "flakes": {
+      "image": "../tips/erosion-80.png"
+    }
+  },
+  "settings": {
+    "tip": {
+      "shape": "round",
+      "size": 120,
+      "hardness": 0.85,
+      "spacing": 0.12
+    },
+    "shape": {
+      "enabled": true,
+      "sizeControl": {
+        "source": "pressure",
+        "fadeSteps": 25
+      },
+      "sizeJitter": 0.15,
+      "minDiameter": 0.45
+    },
+    "dual": {
+      "enabled": true,
+      "shape": "@flakes",
+      "size": 156,
+      "spacing": 0.5,
+      "scatter": 0.7,
+      "bothAxes": true,
+      "count": 1,
+      "mode": "multiply"
+    },
+    "flow": 0.9
+  }
+}

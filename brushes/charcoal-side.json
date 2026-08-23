@@ -1,0 +1,49 @@
+{
+  "name": "Charcoal Side 90",
+  "id": "charcoal-side",
+  "notes": "Charcoal on toothy paper. The texture channel IS the paper: a rank-equalized fractal tooth field (tips/charcoal.spec.json, canvas-anchored so overlapping strokes share their grain) carves the stroke in subtract mode - the contact model of docs/fractal-texture-math.md: a pixel inks where tooth height exceeds 1 minus accumulated alpha, so PRESSURE is the coverage dial, continuously, instead of a nine-member family. Flow is spread over a fine spacing (8%) so the accumulation exponent, not any single dab, sets the press depth - coarse spacing at the same deposit re-exposes the stamp comb through the carve's threshold (tried at 25% spacing: visible pickets). Build-up over repeated passes fills the tooth progressively, like real charcoal. This is the side of the stick: a wide feathered contact (plume-soft) that holds its angle for the whole stroke (initial direction), for broad scumbles and tone fields. The soft skirt carved by the tooth is what makes the dry ragged edge.",
+  "patterns": {
+    "tooth": {
+      "image": "../tips/charcoal-tooth.png"
+    }
+  },
+  "settings": {
+    "tip": {
+      "shape": "plume-soft",
+      "size": 90,
+      "roundness": 0.4,
+      "spacing": 0.08,
+      "angle": 90
+    },
+    "shape": {
+      "enabled": true,
+      "sizeControl": {
+        "source": "pressure",
+        "fadeSteps": 25
+      },
+      "minDiameter": 0.7,
+      "angleControl": {
+        "source": "initial-direction",
+        "fadeSteps": 25
+      }
+    },
+    "texture": {
+      "enabled": true,
+      "pattern": "@tooth",
+      "scale": 1,
+      "mode": "subtract",
+      "depth": 1,
+      "textureEachTip": false
+    },
+    "transfer": {
+      "enabled": true,
+      "flowControl": {
+        "source": "pressure",
+        "fadeSteps": 25
+      },
+      "flowJitter": 0.1,
+      "flowMin": 0.03
+    },
+    "flow": 0.58
+  }
+}

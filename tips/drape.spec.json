@@ -1,0 +1,64 @@
+{
+ "name": "drape",
+ "notes": "Hanging cloth: a steep (beta 3.0) wedge gives soft folds at every scale, and a light warp curves them the way gravity does. Steeper than woodgrain and wider in the wedge, so the folds are broad and smooth rather than fibrous. The unwarped version measured only 4.7% delivered contrast; the warp and the rigid train are what make it read. Rides the SHALLOW RIGID train (dual scatter 0.2, spacing 0.28, n=3) because the warp makes its curves PHASE structure, and a deep train averages independent windows and blends curves away. Measured both ways on this family: three-quarters more delivered contrast on the rigid train at equal ripple (docs/spectral-atlas.md §4). tonal.gain 1.7 is the shallower train's compensation. From the spectral sweep in docs/spectral-atlas.md; levels 30/55/80 are damage DEPTH, not coverage - moderate damage renders as moderate contrast over intact paint. Verified by tools/spectrum-audit.mjs. Dual spacing tightened to 0.18 (from the family default 0.28): the rigid train leaves a deterministic count staircase at 1/spacing whose amplitude goes as 1/n, and this spectrum carries enough coarse power to sit right on it - the line measured 8.9% of tone before and 2.9% after, for about a fifth of the delivered contrast. tonal.gain follows n down.",
+ "native": 1024,
+ "seed": 71000107,
+ "outDir": ".",
+ "spectrum": {
+  "bandLoCyclesPerDia": 0.5,
+  "shoulderCyclesPerDia": 2,
+  "lowSlope": 1.5,
+  "beta": 3,
+  "kneeCyclesPerDia": 400,
+  "beta2": 3,
+  "cutCyclesPerDia": 70,
+  "taperCyclesPerDia": 85,
+  "sectorDeg": 22
+ },
+ "warp": {
+  "amp": 0.04,
+  "k": 2
+ },
+ "vignette": {
+  "inner": 0.84,
+  "rag": 0.18
+ },
+ "aaCanvasPx": 0.7,
+ "train": {
+  "size": 120,
+  "flow": 0.9,
+  "primary": {
+   "hardness": 0.85,
+   "spacing": 0.12,
+   "sizeJitter": 0.15,
+   "minDiameter": 0.45
+  },
+  "dual": {
+   "sizeRatio": 1.3,
+   "spacing": 0.18,
+   "scatter": 0.2,
+   "count": 1
+  }
+ },
+ "levels": [
+  {
+   "coverage": 0.3,
+   "depth": 0.3
+  },
+  {
+   "coverage": 0.55,
+   "depth": 0.55
+  },
+  {
+   "coverage": 0.8,
+   "depth": 0.8
+  }
+ ],
+ "maskMode": "tonal",
+ "tonal": {
+  "mode": "modulate",
+  "gain": 2.1,
+  "floor": 0.02
+ },
+ "scatterDeconv": false
+}

@@ -1,0 +1,75 @@
+{
+  "name": "oil-sponge",
+  "notes": "Sponge-with-oil-on-Masonite coverage family. One spectrally shaped field (docs/fractal-texture-math.md §6), thresholded at nine depths; q values below are calibrated by tools/fractal-tip.mjs --calibrate so measured flat-stroke coverage lands on each level's target. The train block is the family's shared stamp train and must match the brush documents in brushes/oil-sponge-*.json.",
+  "native": 1024,
+  "seed": 20260822,
+  "spectrum": {
+    "shoulderCyclesPerDia": 3.5,
+    "beta": 1.5,
+    "kneeCyclesPerDia": 8.5,
+    "beta2": 3.2,
+    "cutCyclesPerDia": 45,
+    "taperCyclesPerDia": 55,
+    "bandLoCyclesPerDia": 0.75,
+    "lowSlope": 1.5
+  },
+  "vignette": {
+    "inner": 0.8,
+    "rag": 0.22
+  },
+  "aaCanvasPx": 0.7,
+  "train": {
+    "size": 120,
+    "flow": 0.9,
+    "primary": {
+      "hardness": 0.85,
+      "spacing": 0.12,
+      "sizeJitter": 0.15,
+      "minDiameter": 0.45
+    },
+    "dual": {
+      "sizeRatio": 1.3,
+      "spacing": 0.33,
+      "scatter": 0.7,
+      "count": 1
+    }
+  },
+  "levels": [
+    {
+      "coverage": 0.1,
+      "q": 0.0186
+    },
+    {
+      "coverage": 0.2,
+      "q": 0.0435
+    },
+    {
+      "coverage": 0.3,
+      "q": 0.0783
+    },
+    {
+      "coverage": 0.4,
+      "q": 0.1111
+    },
+    {
+      "coverage": 0.5,
+      "q": 0.1588
+    },
+    {
+      "coverage": 0.6,
+      "q": 0.2109
+    },
+    {
+      "coverage": 0.7,
+      "q": 0.2754
+    },
+    {
+      "coverage": 0.8,
+      "q": 0.3674
+    },
+    {
+      "coverage": 0.9,
+      "q": 0.51
+    }
+  ]
+}

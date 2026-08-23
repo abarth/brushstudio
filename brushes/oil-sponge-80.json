@@ -1,0 +1,38 @@
+{
+  "name": "Oil Sponge 80",
+  "id": "oil-sponge-80",
+  "notes": "A sponge loaded with oil paint, pounced on Masonite \u2014 one of nine coverage-graded members (10%..90% of core-band stroke pixels inked; the ragged edge zone is excluded from the grade by design, so measure's box coverage reads a little lower). Math: docs/fractal-texture-math.md. Tip synthesis + calibration: tips/oil-sponge.spec.json via tools/fractal-tip.mjs; spectral verification: tools/spectrum-audit.mjs. Architecture: the texture rides the DUAL slot \u2014 a spectrally shaped fractal sponge mask (pore knee ~8.5 cycles/diameter, torn vignette, per-level ink fraction) gates a solid hard round primary. The mask multiplies the finished stroke once, so its pore labyrinth survives however densely the primary accumulates; carrying the texture on the primary tip was tried first and rejected \u2014 a ~4-deep union averages the labyrinth into granular dust. Dual size 130% puts mask features across the stroke edge, which is where the ragged, texture-driven edge comes from. Rejected along the way: scatter 1.5 and 0.9 mask trains (load-clumping beads at 1-2.5 diameters; see the clumping law in the math doc \u00a73) and narrow mask plateaus (tear bays aligned and broke the 80-90% strokes). The audit shows no stamp comb, no spectral spikes, anisotropy under 3 dB across the family. Heavy coverage breathing through scattered pore clusters.",
+  "tips": {
+    "sponge": {
+      "image": "../tips/oil-sponge-80.png"
+    }
+  },
+  "settings": {
+    "tip": {
+      "shape": "round",
+      "size": 120,
+      "hardness": 0.85,
+      "spacing": 0.12
+    },
+    "shape": {
+      "enabled": true,
+      "sizeControl": {
+        "source": "pressure",
+        "fadeSteps": 25
+      },
+      "sizeJitter": 0.15,
+      "minDiameter": 0.45
+    },
+    "dual": {
+      "enabled": true,
+      "shape": "@sponge",
+      "size": 156,
+      "spacing": 0.33,
+      "scatter": 0.7,
+      "bothAxes": true,
+      "count": 1,
+      "mode": "multiply"
+    },
+    "flow": 0.9
+  }
+}

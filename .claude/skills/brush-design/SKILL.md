@@ -6,8 +6,10 @@ description: Design, tune, and ship Photoshop brushes in this repository — wri
 # Designing a brush
 
 The full loop is `docs/workflow.md`; the parameter relationships are
-`docs/parameters.md`. This is the short version and the rules that keep it
-from going slow.
+`docs/parameters.md`. For a natural-texture brush or a coverage-graded
+family, the signal-processing model (repetition, scatter kernels, coverage
+math, tip synthesis) is `docs/fractal-texture-math.md`. This is the short
+version and the rules that keep it from going slow.
 
 ## The loop
 

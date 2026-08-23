@@ -16,6 +16,9 @@ Then, as needed:
 | | |
 | --- | --- |
 | `docs/parameters.md` | what the knobs do, and the ratios between them that actually decide a mark |
+| `docs/whitepaper.md` | the method end to end, for a reader who knows signal processing — start here for why, not how |
+| `docs/fractal-texture-math.md` | the frequency-domain model of a stroke — read before designing a natural-texture brush or a coverage-graded family |
+| `docs/spectral-atlas.md` | the map of 2-D power spectra: what each region paints, what makes one fractal, and what has been swept so far |
 | `docs/brush-format.md` | the brush document format |
 | `docs/abr.md` | studying and shipping Photoshop packs |
 | `docs/backends.md` | the two renderers, and when the default is the wrong one |
@@ -31,7 +34,13 @@ npm run brush -- measure brushes/x.json                # numbers, not impression
 npm run brush -- compare brushes/x.json --ref refs/P.abr#"Name"
 npm run brush -- inspect refs/P.abr --json             # read a pack apart
 npm run brush -- export  brushes/ -o out/P.abr         # a dir, docs or a pack
-npm run dev                                            # paint with it by hand
+npm run brush -- export  brushes/spectral.pack.json -o out/SpectralTextures.abr
+npm run dev                                            # paint by hand; carries the spectrum lab
+
+node tools/fractal-tip.mjs tips/x.spec.json --calibrate  # synthesize + calibrate texture tips
+node tools/spectrum-audit.mjs brushes/x.json             # comb/spike/isotropy/β on painted marks
+node tools/fractal-tip.mjs tips/x.spec.json --field       # ~1s damage-map preview, for sweeping spectra
+node tools/accumulation-survey.mjs                       # what the dual gate can and cannot do to tone
 
 npm test                 # the harness suite, CPU renderer (~4s)
 npm run test:gpu         # the same suite through WebGPU (~30s)

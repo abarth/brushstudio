@@ -1,0 +1,38 @@
+{
+  "name": "Fault Lines 55",
+  "id": "fault-lines-55",
+  "notes": "Faulted stone: 72 half-plane faults at full step - solid polygonal facets with subtle ridge lines along the traces - gating a solid primary. TONAL dual-gate: the mask is the tone-mapped texture field itself, not a threshold cut, so the stroke carries the texture as graded alpha and a window from a stroke matches the designed height field. The level number is the damage/modulation DEPTH (contrast dial): damage is a delta from the intact material, so moderate damage = moderate contrast - per review. Two deconvolutions bind the stroke to the design (docs/fractal-texture-math.md): the spectral 1/H pre-compensation on the field's fbm band, and the value-curve inverse v = 1-(depth*damage)^(1/n) that undoes the mask train's ~n-stamp over-compositing. Threshold-cut coverage masks were the first shipped form and were revised on review (maximal contrast everywhere, stroke windows unlike the swatch fields). Mapping modulate: facet panes as flat tones, traces as seams. Full pane read. Tips from tips/fault-lines.spec.json; audited by tools/spectrum-audit.mjs. REVISED after splotch review (dark/light discs at stroke width): dual scatter 0.7->0.2 makes the per-point stamp count deterministic (composite tone = v^n), and the tip field carries no content coarser than the stamp, so no stamp tints its whole footprint.",
+  "tips": {
+    "mask": {
+      "image": "../tips/fault-lines-55.png"
+    }
+  },
+  "settings": {
+    "tip": {
+      "shape": "round",
+      "size": 120,
+      "hardness": 0.85,
+      "spacing": 0.12
+    },
+    "shape": {
+      "enabled": true,
+      "sizeControl": {
+        "source": "pressure",
+        "fadeSteps": 25
+      },
+      "sizeJitter": 0.15,
+      "minDiameter": 0.45
+    },
+    "dual": {
+      "enabled": true,
+      "shape": "@mask",
+      "size": 156,
+      "spacing": 0.28,
+      "scatter": 0.2,
+      "bothAxes": true,
+      "count": 1,
+      "mode": "multiply"
+    },
+    "flow": 0.9
+  }
+}

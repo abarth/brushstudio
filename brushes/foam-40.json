@@ -1,0 +1,38 @@
+{
+  "name": "Foam 40",
+  "id": "foam-40",
+  "notes": "Sea foam as a coverage family: level N = N% wall material. All nine tips are thresholds of ONE growth-time field (tips/foam.spec.json): bubbles at four Worley scales with heavy-tailed per-cell radii, the field being how far every bubble must inflate before swallowing the point - so stepping the level down IS uniform bubble growth, walls thin everywhere at once, and the lace stays connected instead of retreating to junction dots (the absolute-distance field was tried and does exactly that). Round windows come from the f1 metric; Plateau-border thickening at junctions falls out of the geometry. Dual-gate train as oil-sponge; levels 10-20 use a sparser mask train so the thin lace prints through instead of double-exposing. Audited comb-free and isotropic; see docs/fractal-texture-math.md for the architecture. Lace knits; bubble windows dominate.",
+  "tips": {
+    "foam": {
+      "image": "../tips/foam-40.png"
+    }
+  },
+  "settings": {
+    "tip": {
+      "shape": "round",
+      "size": 120,
+      "hardness": 0.85,
+      "spacing": 0.12
+    },
+    "shape": {
+      "enabled": true,
+      "sizeControl": {
+        "source": "pressure",
+        "fadeSteps": 25
+      },
+      "sizeJitter": 0.15,
+      "minDiameter": 0.45
+    },
+    "dual": {
+      "enabled": true,
+      "shape": "@foam",
+      "size": 156,
+      "spacing": 0.33,
+      "scatter": 0.7,
+      "bothAxes": true,
+      "count": 1,
+      "mode": "multiply"
+    },
+    "flow": 0.9
+  }
+}

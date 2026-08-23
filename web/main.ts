@@ -19,6 +19,7 @@ import { resolveBrush, type AssetBag, type BrushDoc } from '../src/harness/brush
 import { diffFromDefaults } from '../src/harness/patch';
 import { makeLayerMeta, type HSV, type LayerMeta } from '../src/types';
 import { numberField } from './field';
+import { initLab } from './lab';
 import { BLEND_CHOICES, CONTROL_CHOICES, GROUPS, type Group, type Item, type Path } from './groups';
 import { drawSwatch } from './swatch';
 
@@ -794,6 +795,59 @@ async function selectBrush(path: string): Promise<void> {
   }
 }
 
+/**
+ * Paint with a tip the spectrum lab just synthesized.
+ *
+ * The lab hands back PNG bytes, so this is the library's own path with the
+ * document made up on the spot rather than read from `brushes/`: the same
+ * `resolveBrush`, so the tip is registered and the settings are resolved
+ * exactly as a saved brush's would be. Each synthesis gets a fresh engine
+ * id, because a tip is uploaded once per id and reusing one would paint
+ * with the previous bitmap.
+ */
+let labSerial = 0;
+
+async function applyLabTip(png: string, label: string, train: 'deep' | 'rigid'): Promise<void> {
+  const id = `spectrum-lab-${++labSerial}`;
+  const doc: BrushDoc = {
+    name: label,
+    id,
+    tips: { mask: { image: id } },
+    settings: {
+      tip: { shape: 'round', size: 120, hardness: 0.85, spacing: 0.12 },
+      shape: {
+        enabled: true,
+        sizeControl: { source: 'pressure', fadeSteps: 25 },
+        sizeJitter: 0.15,
+        minDiameter: 0.45,
+      },
+      dual: {
+        enabled: true,
+        shape: '@mask',
+        size: 156,
+        spacing: train === 'deep' ? 0.07 : 0.28,
+        scatter: train === 'deep' ? 0.7 : 0.2,
+        bothAxes: true,
+        count: 1,
+        mode: 'multiply',
+      },
+      flow: 0.9,
+    } as BrushPatch,
+  };
+  const resolved = await resolveBrush(doc, { [id]: { path: id, data: png } }, id);
+  settings = resolved.settings;
+  baseline = JSON.parse(JSON.stringify(settings)) as BrushSettings;
+  docTips = [['mask', resolved.aliases.mask]];
+  docPatterns = [];
+  aliasBack = new Map(Object.entries(resolved.aliases).map(([name, engineId]) => [engineId, name]));
+  current = '';
+  folded.clear();
+  renderLibrary();
+  buildControls();
+  onChange();
+  $('brushname').textContent = label;
+}
+
 async function boot(): Promise<void> {
   if (!navigator.gpu) {
     setStatus('this browser has no WebGPU — try Chrome, Edge, or a recent Safari', 0);
@@ -812,6 +866,7 @@ async function boot(): Promise<void> {
   }
   await selectBrush(LIBRARY[0].path);
   clear();
+  initLab({ apply: applyLabTip, status: setStatus });
 }
 
 // --- chrome ---------------------------------------------------------------
@@ -842,6 +897,23 @@ for (const pop of pops) {
     if ((e.target as HTMLElement).tagName === 'BUTTON') pop.open = false;
   });
 }
+
+/**
+ * The panel has two modes, because the spectrum lab is a place you work
+ * rather than a menu you pick from — its loop is tweak, synthesize, paint,
+ * tweak, and it needs the room and the persistence that a popover cannot
+ * give it. The brush stays live across the switch: whatever the lab last
+ * synthesized is still what the canvas paints with, so flipping back to
+ * `brush` is how you inspect and adjust a lab tip's engine settings.
+ */
+function setMode(mode: 'brush' | 'lab'): void {
+  document.querySelector('aside')!.dataset.mode = mode;
+  $('mode-brush').classList.toggle('on', mode === 'brush');
+  $('mode-lab').classList.toggle('on', mode === 'lab');
+}
+$('mode-brush').addEventListener('click', () => setMode('brush'));
+$('mode-lab').addEventListener('click', () => setMode('lab'));
+setMode('brush');
 
 $('controls').addEventListener('pointerleave', () => setHint(''));
 $('clear').addEventListener('click', clear);

@@ -1,0 +1,61 @@
+{
+ "name": "corduroy",
+ "notes": "Combed clay, corduroy, drawn fibre: a tighter ring at 16 c/dia in a 12-degree wedge. Graphic and crisp where sand is loose; the narrower wedge is what straightens the crests. Rides the DEEP scattered train (dual scatter 0.7, spacing 0.07, n=12): a stationary Gaussian field averages to the same field, so it can spend the overlap that buys full scatter (docs/spectral-atlas.md §4). tonal.gain 3 restores the log-contrast that averaging costs; tonal.floor 0.02 stops one stamp's field minimum punching a full-ink speck through the stack. From the spectral sweep in docs/spectral-atlas.md; levels 30/55/80 are damage DEPTH, not coverage - moderate damage renders as moderate contrast over intact paint. Verified by tools/spectrum-audit.mjs. REVISED on review: crest axis turned 90 degrees (sectorAxisDeg 90), so the fibre runs ALONG the mark instead of hatching across it - a drag brush rather than a comb held sideways. sand already covers crests-across at a coarser scale, so the collection gets both orientations. Costs a little delivered contrast (10.6% -> 8.6%, since a narrow stroke shows less variation across itself) and cuts the train line from 2.6% to 0.9%.",
+ "native": 1024,
+ "seed": 71000023,
+ "outDir": ".",
+ "spectrum": {
+  "bandLoCyclesPerDia": 9.92,
+  "shoulderCyclesPerDia": 16,
+  "lowSlope": 4,
+  "beta": 0,
+  "kneeCyclesPerDia": 16.8,
+  "beta2": 5,
+  "cutCyclesPerDia": 80,
+  "taperCyclesPerDia": 96,
+  "sectorDeg": 12,
+  "sectorAxisDeg": 90
+ },
+ "vignette": {
+  "inner": 0.84,
+  "rag": 0.18
+ },
+ "aaCanvasPx": 0.7,
+ "train": {
+  "size": 120,
+  "flow": 0.9,
+  "primary": {
+   "hardness": 0.85,
+   "spacing": 0.12,
+   "sizeJitter": 0.15,
+   "minDiameter": 0.45
+  },
+  "dual": {
+   "sizeRatio": 1.3,
+   "spacing": 0.07,
+   "scatter": 0.7,
+   "count": 1
+  }
+ },
+ "levels": [
+  {
+   "coverage": 0.3,
+   "depth": 0.3
+  },
+  {
+   "coverage": 0.55,
+   "depth": 0.55
+  },
+  {
+   "coverage": 0.8,
+   "depth": 0.8
+  }
+ ],
+ "maskMode": "tonal",
+ "tonal": {
+  "mode": "modulate",
+  "gain": 3,
+  "floor": 0.02
+ },
+ "scatterDeconv": true
+}

@@ -1,0 +1,38 @@
+{
+  "name": "Marble 90",
+  "id": "marble-90",
+  "notes": "Marble veining as a coverage family: level N = N% vein material. Veins are the zero contours of band-passed Gaussian fields - smooth curves that never repeat - in a four-octave hierarchy, each octave's ridge modulated by a slow field so veins wax and wane along their length (without this the ridge is a plateau and sparse cuts shatter into chips - tried and rejected), everything sampled through one strong low-frequency domain warp: the marble flow. Nine NESTED thresholds of one veinness field (tips/marble.spec.json): thin primaries at 10 through breccia-like vein matrix at 90. Dual-gate train (mask 150% of the primary so vein features cross the stroke edge); levels 10-30 print through a sparser mask train so thin veins are not double-exposed. Verified comb-free and spike-free by tools/spectrum-audit.mjs; the vein anisotropy is local, so sector power stays within a few dB globally. Near-solid vein matrix; the last stone windows close.",
+  "tips": {
+    "veins": {
+      "image": "../tips/marble-90.png"
+    }
+  },
+  "settings": {
+    "tip": {
+      "shape": "round",
+      "size": 120,
+      "hardness": 0.85,
+      "spacing": 0.12
+    },
+    "shape": {
+      "enabled": true,
+      "sizeControl": {
+        "source": "pressure",
+        "fadeSteps": 25
+      },
+      "sizeJitter": 0.15,
+      "minDiameter": 0.45
+    },
+    "dual": {
+      "enabled": true,
+      "shape": "@veins",
+      "size": 150,
+      "spacing": 0.33,
+      "scatter": 0.7,
+      "bothAxes": true,
+      "count": 1,
+      "mode": "multiply"
+    },
+    "flow": 0.9
+  }
+}

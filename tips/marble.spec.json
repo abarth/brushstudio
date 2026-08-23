@@ -1,0 +1,122 @@
+{
+  "name": "marble",
+  "notes": "Marble veining as a coverage family: level N = N% vein material. Veins are the zero contours of band-passed Gaussian fields - smooth non-repeating curves - in a four-octave hierarchy (primary veins + tributaries), domain-warped by one strong low-frequency flow. Nine nested thresholds of one veinness field: 10 = thin primary veins, 50 = the full hierarchy, 90 = a breccia-like vein matrix with stone windows. Dual-gate train; low levels print through a sparser mask train so thin veins are not double-exposed by overlap.",
+  "native": 1024,
+  "seed": 20260827,
+  "field": {
+    "kind": "veins",
+    "octaves": [
+      {
+        "k": 4,
+        "weight": 1,
+        "width": 0.16,
+        "bandwidth": 0.35
+      },
+      {
+        "k": 8,
+        "weight": 0.55,
+        "width": 0.14,
+        "bandwidth": 0.35
+      },
+      {
+        "k": 16,
+        "weight": 0.35,
+        "width": 0.13,
+        "bandwidth": 0.35
+      },
+      {
+        "k": 28,
+        "weight": 0.22,
+        "width": 0.12,
+        "bandwidth": 0.35
+      }
+    ],
+    "warp": 0.06,
+    "warpK": 3,
+    "modK": 2.2
+  },
+  "spectrum": {
+    "bandLoCyclesPerDia": 0.75,
+    "shoulderCyclesPerDia": 4,
+    "lowSlope": 1.5,
+    "beta": 2,
+    "kneeCyclesPerDia": 12,
+    "beta2": 3.5,
+    "cutCyclesPerDia": 45,
+    "taperCyclesPerDia": 55
+  },
+  "vignette": {
+    "inner": 0.8,
+    "rag": 0.22
+  },
+  "aaCanvasPx": 0.6,
+  "train": {
+    "size": 120,
+    "flow": 0.9,
+    "primary": {
+      "hardness": 0.85,
+      "spacing": 0.12,
+      "sizeJitter": 0.15,
+      "minDiameter": 0.45
+    },
+    "dual": {
+      "sizeRatio": 1.25,
+      "spacing": 0.33,
+      "scatter": 0.7,
+      "count": 1
+    }
+  },
+  "levels": [
+    {
+      "coverage": 0.1,
+      "q": 0.0213,
+      "train": {
+        "dual": {
+          "spacing": 0.5
+        }
+      }
+    },
+    {
+      "coverage": 0.2,
+      "q": 0.048,
+      "train": {
+        "dual": {
+          "spacing": 0.5
+        }
+      }
+    },
+    {
+      "coverage": 0.3,
+      "q": 0.0701,
+      "train": {
+        "dual": {
+          "spacing": 0.5
+        }
+      }
+    },
+    {
+      "coverage": 0.4,
+      "q": 0.0662
+    },
+    {
+      "coverage": 0.5,
+      "q": 0.0897
+    },
+    {
+      "coverage": 0.6,
+      "q": 0.1104
+    },
+    {
+      "coverage": 0.7,
+      "q": 0.145
+    },
+    {
+      "coverage": 0.8,
+      "q": 0.1855
+    },
+    {
+      "coverage": 0.9,
+      "q": 0.2516
+    }
+  ]
+}

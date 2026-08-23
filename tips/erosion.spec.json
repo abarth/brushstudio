@@ -1,0 +1,112 @@
+{
+  "name": "erosion",
+  "notes": "Flaked-paint coverage family: level N = N% of the paint film REMAINING, so the ladder runs from a few surviving flakes (10) to intact paint with hairline cracks and a few lost chips (90). One cellular survival field (three Worley scales of per-cell values + clustering fbm - a dip along the coarsest cell walls), thresholded at nine nested levels: paint only ever disappears as the level drops, so the family is one surface progressively flaking. The wall dip keeps crack lines below threshold at high coverage - Erosion 80/90 read as craquelure. Dual-gate train as oil-sponge; crisper AA (0.45px) because a paint film breaks sharply.",
+  "native": 1024,
+  "seed": 20260825,
+  "field": {
+    "kind": "cellular",
+    "scales": [
+      {
+        "cells": 7,
+        "weight": 1
+      },
+      {
+        "cells": 14,
+        "weight": 0.55
+      },
+      {
+        "cells": 30,
+        "weight": 0.32
+      }
+    ],
+    "warp": 0.02,
+    "fbmWeight": 0.55,
+    "wallScaleIndex": 0,
+    "wallWidth": 0.07,
+    "wallDepth": 1.1
+  },
+  "spectrum": {
+    "bandLoCyclesPerDia": 0.75,
+    "shoulderCyclesPerDia": 3,
+    "lowSlope": 1.5,
+    "beta": 2,
+    "kneeCyclesPerDia": 10,
+    "beta2": 3.5,
+    "cutCyclesPerDia": 45,
+    "taperCyclesPerDia": 55
+  },
+  "vignette": {
+    "inner": 0.8,
+    "rag": 0.22
+  },
+  "aaCanvasPx": 0.45,
+  "train": {
+    "size": 120,
+    "flow": 0.9,
+    "primary": {
+      "hardness": 0.85,
+      "spacing": 0.12,
+      "sizeJitter": 0.15,
+      "minDiameter": 0.45
+    },
+    "dual": {
+      "sizeRatio": 1.3,
+      "spacing": 0.33,
+      "scatter": 0.7,
+      "count": 1
+    }
+  },
+  "levels": [
+    {
+      "coverage": 0.1,
+      "q": 0.0203
+    },
+    {
+      "coverage": 0.2,
+      "q": 0.0446
+    },
+    {
+      "coverage": 0.3,
+      "q": 0.0703
+    },
+    {
+      "coverage": 0.4,
+      "q": 0.1073
+    },
+    {
+      "coverage": 0.5,
+      "q": 0.1536
+    },
+    {
+      "coverage": 0.6,
+      "q": 0.216
+    },
+    {
+      "coverage": 0.7,
+      "q": 0.4596,
+      "train": {
+        "dual": {
+          "spacing": 0.5
+        }
+      }
+    },
+    {
+      "coverage": 0.8,
+      "q": 0.5744,
+      "train": {
+        "dual": {
+          "spacing": 0.5
+        }
+      }
+    },
+    {
+      "coverage": 0.9,
+      "q": 0.747,
+      "train": {
+        "dual": {
+          "spacing": 0.5
+        }
+      }
+    }
+  ]
+}

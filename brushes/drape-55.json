@@ -1,0 +1,38 @@
+{
+  "name": "Drape 55",
+  "id": "drape-55",
+  "notes": "Hanging cloth: a steep (beta 3.0) wedge gives soft folds at every scale, and a light warp curves them the way gravity does. Steeper than woodgrain and wider in the wedge, so the folds are broad and smooth rather than fibrous. The unwarped version measured only 4.7% delivered contrast; the warp and the rigid train are what make it read. TONAL dual-gate: the mask is the tone-mapped field itself, so the stroke carries the texture as graded alpha and the level number is the damage/modulation DEPTH. Rides the SHALLOW RIGID train (dual scatter 0.2, spacing 0.28, n=3) because the warp makes its curves PHASE structure, and a deep train averages independent windows and blends curves away. Measured both ways on this family: three-quarters more delivered contrast on the rigid train at equal ripple (docs/spectral-atlas.md §4). tonal.gain 1.7 is the shallower train's compensation. Tip from tips/drape.spec.json; audited by tools/spectrum-audit.mjs. Dual spacing 0.18, not the rigid-train default 0.28: this spectrum sat on the train's count staircase and the residual line needed the deeper overlap.",
+  "tips": {
+    "mask": {
+      "image": "../tips/drape-55.png"
+    }
+  },
+  "settings": {
+    "tip": {
+      "shape": "round",
+      "size": 120,
+      "hardness": 0.85,
+      "spacing": 0.12
+    },
+    "shape": {
+      "enabled": true,
+      "sizeControl": {
+        "source": "pressure",
+        "fadeSteps": 25
+      },
+      "sizeJitter": 0.15,
+      "minDiameter": 0.45
+    },
+    "dual": {
+      "enabled": true,
+      "shape": "@mask",
+      "size": 156,
+      "spacing": 0.18,
+      "scatter": 0.2,
+      "bothAxes": true,
+      "count": 1,
+      "mode": "multiply"
+    },
+    "flow": 0.9
+  }
+}

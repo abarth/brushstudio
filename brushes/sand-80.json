@@ -1,0 +1,38 @@
+{
+  "name": "Sand 80",
+  "id": "sand-80",
+  "notes": "Rippled sand: a narrow ring at 10 c/dia confined to an 18-degree wedge. The ring fixes one ripple wavelength, the wedge deletes every orientation but one, and random phase supplies the dislocations and Y-junctions a real ripple field has without any of it being modelled. TONAL dual-gate: the mask is the tone-mapped field itself, so the stroke carries the texture as graded alpha and the level number is the damage/modulation DEPTH. Rides the DEEP scattered train (dual scatter 0.7, spacing 0.07, n=12): a stationary Gaussian field averages to the same field, so it can spend the overlap that buys full scatter (docs/spectral-atlas.md §4). tonal.gain 3 restores the log-contrast that averaging costs; tonal.floor 0.02 stops one stamp's field minimum punching a full-ink speck through the stack. Tip from tips/sand.spec.json; audited by tools/spectrum-audit.mjs.",
+  "tips": {
+    "mask": {
+      "image": "../tips/sand-80.png"
+    }
+  },
+  "settings": {
+    "tip": {
+      "shape": "round",
+      "size": 120,
+      "hardness": 0.85,
+      "spacing": 0.12
+    },
+    "shape": {
+      "enabled": true,
+      "sizeControl": {
+        "source": "pressure",
+        "fadeSteps": 25
+      },
+      "sizeJitter": 0.15,
+      "minDiameter": 0.45
+    },
+    "dual": {
+      "enabled": true,
+      "shape": "@mask",
+      "size": 156,
+      "spacing": 0.07,
+      "scatter": 0.7,
+      "bothAxes": true,
+      "count": 1,
+      "mode": "multiply"
+    },
+    "flow": 0.9
+  }
+}

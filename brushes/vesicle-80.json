@@ -1,0 +1,38 @@
+{
+  "name": "Vesicle 80",
+  "id": "vesicle-80",
+  "notes": "Vesicular basalt, beaded glaze: the cellular ring carried by a lognormal damage map instead of a rank-uniform one. The mask accumulates a geometric mean, so lognormal is the histogram this architecture actually wants (atlas §1); sigma sets intermittency, and the result is mostly-intact material with scattered beads rather than an even field. TONAL dual-gate: the mask is the tone-mapped field itself, so the stroke carries the texture as graded alpha and the level number is the damage/modulation DEPTH. Rides the DEEP scattered train (dual scatter 0.7, spacing 0.07, n=12): a stationary Gaussian field averages to the same field, so it can spend the overlap that buys full scatter (docs/spectral-atlas.md §4). tonal.gain 3 restores the log-contrast that averaging costs; tonal.floor 0.02 stops one stamp's field minimum punching a full-ink speck through the stack. Tip from tips/vesicle.spec.json; audited by tools/spectrum-audit.mjs. REVISED on review: lognormal sigma 0.8 -> 0.5. At 0.8 the median damage sat at e^-2.06 of full and the mark read as near-solid paint with a whisper of beading (4.2% delivered contrast); 0.5 lifts it to 5.9% while keeping the intermittent, mostly-intact character the cascade mapping exists for.",
+  "tips": {
+    "mask": {
+      "image": "../tips/vesicle-80.png"
+    }
+  },
+  "settings": {
+    "tip": {
+      "shape": "round",
+      "size": 120,
+      "hardness": 0.85,
+      "spacing": 0.12
+    },
+    "shape": {
+      "enabled": true,
+      "sizeControl": {
+        "source": "pressure",
+        "fadeSteps": 25
+      },
+      "sizeJitter": 0.15,
+      "minDiameter": 0.45
+    },
+    "dual": {
+      "enabled": true,
+      "shape": "@mask",
+      "size": 156,
+      "spacing": 0.07,
+      "scatter": 0.7,
+      "bothAxes": true,
+      "count": 1,
+      "mode": "multiply"
+    },
+    "flow": 0.9
+  }
+}
